@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Ping</title>
+    <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Простой хедер -->
+        <div class="header">
+            <i class="fas fa-bolt"></i>
+            <h1>Quick Ping</h1>
+        </div>
+
+        <!-- Основной контент -->
+        <div class="main-content">
+            <!-- Ввод URL -->
+            <div class="input-section">
+                <div class="input-group">
+                    <input type="text" id="urlInput" placeholder="site.com" autocomplete="off" spellcheck="false">
+                    <button id="pingBtn" class="btn-primary">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </div>
+                
+                <!-- Быстрые кнопки -->
+                <div class="quick-buttons">
+                    <button class="quick-btn" data-url="google.com">
+                        <i class="fab fa-google"></i>
+                        <span>Google</span>
+                    </button>
+                    <button class="quick-btn" data-url="youtube.com">
+                        <i class="fab fa-youtube"></i>
+                        <span>YouTube</span>
+                    </button>
+                    <button class="quick-btn" data-url="github.com">
+                        <i class="fab fa-github"></i>
+                        <span>GitHub</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Текущий результат -->
+            <div id="currentResult" class="current-result">
+                <div class="result-placeholder">
+                    <i class="fas fa-satellite-dish"></i>
+                    <p>Введите адрес сайта</p>
+                </div>
+            </div>
+
+            <!-- Статистика (только 2 блока) -->
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-label">Последний</div>
+                        <div id="lastPing" class="stat-value">-</div>
+                    </div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-label">Средний</div>
+                        <div id="avgPing" class="stat-value">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- История -->
+            <div class="history-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-history"></i> История</h3>
+                    <button id="clearBtn" class="btn-clear" title="Очистить историю">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div id="historyList" class="history-list">
+                    <!-- История будет здесь -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Простой футер -->
+        <div class="footer">
+            <div id="status" class="status">
+                <i class="fas fa-circle"></i>
+                <span>Готов</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
