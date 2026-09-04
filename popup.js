@@ -387,7 +387,7 @@ function renderResult() {
     if (latest.ok) {
         // Холодный замер несёт на себе рукопожатие, тёплый — нет. Показываем
         // оба, иначе непонятно, почему повторная проверка «быстрее».
-        if (latest.warm !== null && latest.warm !== undefined) {
+        if (Number.isFinite(latest.warm) && Number.isFinite(latest.cold)) {
             chips.push(makeChip(t('chipCold', latest.cold), 'neutral'));
         }
         if (Number.isFinite(latest.jitter)) {
@@ -396,7 +396,7 @@ function renderResult() {
         if (latest.degraded) {
             chips.push(makeChip(t('chipHttp', latest.status), 'warn'));
         }
-    } else {
+    } else if (latest.reason) {
         chips.push(makeChip(latest.reason === 'timeout' ? t('reasonTimeout') : t('reasonNetwork'), 'warn'));
     }
 
@@ -472,20 +472,28 @@ function renderHistory() {
     );
 }
 
-/** Полная расшифровка записи — она же подсказка при наведении. */
+/**
+ * Полная расшифровка записи — она же подсказка при наведении. Каждое поле
+ * проверяется отдельно: записи, сделанные до 1.3, ничего не знают про
+ * cold/warm/jitter, и дорисовывать им "undefined" не за чем.
+ */
 function describe(record) {
     if (!record.ok) {
-        const reason = record.reason === 'timeout' ? t('reasonTimeout') : t('reasonNetwork');
-        return `${record.href}\n${reason}`;
+        if (!record.reason) return record.href;
+        return `${record.href}\n${record.reason === 'timeout' ? t('reasonTimeout') : t('reasonNetwork')}`;
     }
 
-    const parts = [`HTTP ${record.status}`, t('chipSamples', record.samples), t('chipCold', record.cold)];
-    if (record.warm !== null && record.warm !== undefined) parts.push(t('chipWarm', record.warm));
+    const parts = [];
+    if (Number.isFinite(record.status)) parts.push(`HTTP ${record.status}`);
+    if (Number.isFinite(record.samples)) parts.push(t('chipSamples', record.samples));
+    if (Number.isFinite(record.cold)) parts.push(t('chipCold', record.cold));
+    if (Number.isFinite(record.warm)) parts.push(t('chipWarm', record.warm));
     if (Number.isFinite(record.jitter)) parts.push(t('chipJitter', record.jitter));
-    if (Number.isFinite(record.min) && Number.isFinite(record.max)) {
+    if (Number.isFinite(record.min) && Number.isFinite(record.max) && record.min !== record.max) {
         parts.push(t('chipRange', record.min, record.max));
     }
-    return `${record.href}\n${parts.join(' · ')}`;
+
+    return parts.length > 0 ? `${record.href}\n${parts.join(' · ')}` : record.href;
 }
 
 /* ---------------------------------------------------------------------- *
