@@ -19,6 +19,39 @@ body {
     min-height: 500px;
 }
 
+/* Иконки лежат в спрайте внутри popup.html — сеть для оформления не нужна */
+.sprite {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.icon {
+    width: 18px;
+    height: 18px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.icon-xs { width: 10px; height: 10px; }
+.icon-sm { width: 15px; height: 15px; }
+.icon-lg { width: 22px; height: 22px; }
+.icon-xl { width: 42px; height: 42px; stroke-width: 1.4; }
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.spin {
+    animation: spin 0.9s linear infinite;
+    transform-origin: 50% 50%;
+}
+
 /* Хедер */
 .header {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
@@ -30,9 +63,8 @@ body {
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
-.header i {
-    font-size: 1.4rem;
-    color: #60a5fa;
+.header .icon {
+    color: #bfdbfe;
 }
 
 .header h1 {
@@ -66,6 +98,7 @@ body {
 
 #urlInput {
     flex: 1;
+    min-width: 0;
     padding: 12px;
     border: 2px solid #e2e8f0;
     border-radius: 8px;
@@ -79,6 +112,11 @@ body {
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+#urlInput:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+}
+
 .btn-primary {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
@@ -89,11 +127,10 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
-    font-size: 1rem;
+    transition: background 0.2s, transform 0.2s;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
     transform: translateY(-1px);
 }
@@ -112,28 +149,42 @@ body {
 
 .quick-btn {
     flex: 1;
+    min-width: 0;
     background: #f1f5f9;
     border: 2px solid #e2e8f0;
     border-radius: 8px;
-    padding: 10px;
+    padding: 10px 6px;
     font-size: 0.85rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 5px;
     color: #475569;
 }
 
-.quick-btn:hover {
+/* Три кнопки должны уместиться в 350px вместе с самой длинной подписью */
+.quick-btn .icon {
+    width: 13px;
+    height: 13px;
+}
+
+.quick-btn:hover:not(:disabled) {
     background: #3b82f6;
     color: white;
     border-color: #3b82f6;
 }
 
-.quick-btn i {
-    font-size: 0.9rem;
+.quick-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.quick-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Текущий результат */
@@ -151,11 +202,13 @@ body {
 
 .result-placeholder {
     color: #94a3b8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
 }
 
-.result-placeholder i {
-    font-size: 2.5rem;
-    margin-bottom: 10px;
+.result-placeholder .icon {
     color: #cbd5e1;
 }
 
@@ -168,22 +221,30 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 10px;
+    max-width: 100%;
 }
 
 .ping-value {
     font-size: 2.2rem;
     font-weight: 700;
+    color: #1e293b;
 }
 
-.ping-good { color: #10b981; }
-.ping-medium { color: #f59e0b; }
-.ping-bad { color: #ef4444; }
+.ping-value.ping-good { color: #10b981; }
+.ping-value.ping-medium { color: #f59e0b; }
+.ping-value.ping-bad { color: #ef4444; }
+
+.ping-value.ping-error {
+    color: #ef4444;
+    font-size: 1.8rem;
+    letter-spacing: 0.05em;
+}
 
 .ping-url {
     font-size: 0.95rem;
     color: #64748b;
     font-weight: 500;
-    max-width: 250px;
+    max-width: 280px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -204,6 +265,7 @@ body {
     align-items: center;
     gap: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    min-width: 0;
 }
 
 .stat-icon {
@@ -215,7 +277,7 @@ body {
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.1rem;
+    flex: none;
 }
 
 .stat:nth-child(2) .stat-icon {
@@ -224,6 +286,7 @@ body {
 
 .stat-info {
     flex: 1;
+    min-width: 0;
 }
 
 .stat-label {
@@ -236,7 +299,14 @@ body {
     font-size: 1.4rem;
     font-weight: 600;
     color: #1e293b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
+
+.stat-value.ping-good { color: #10b981; }
+.stat-value.ping-medium { color: #f59e0b; }
+.stat-value.ping-bad { color: #ef4444; }
 
 /* История */
 .history-section {
@@ -270,20 +340,40 @@ body {
     background: #fee2e2;
     color: #dc2626;
     border: none;
-    width: 28px;
     height: 28px;
+    padding: 0 7px;
     border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
+    gap: 5px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.2s, color 0.2s;
 }
 
 .btn-clear:hover {
     background: #fca5a5;
+    color: #7f1d1d;
+}
+
+/* Подтверждение живёт внутри попапа: confirm() умеет его закрывать */
+.btn-clear-label {
+    display: none;
+}
+
+.btn-clear.is-armed {
+    background: #dc2626;
     color: white;
-    transform: scale(1.1);
+}
+
+.btn-clear.is-armed:hover {
+    background: #b91c1c;
+    color: white;
+}
+
+.btn-clear.is-armed .btn-clear-label {
+    display: inline;
 }
 
 .history-list {
@@ -292,12 +382,20 @@ body {
     max-height: 150px;
 }
 
+.history-empty {
+    text-align: center;
+    padding: 20px;
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
 .history-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
     padding: 10px 0;
-    border-bottom: 1px solid #f8fafc;
+    border-bottom: 1px solid #f1f5f9;
     font-size: 0.9rem;
 }
 
@@ -307,10 +405,22 @@ body {
 
 .history-url {
     color: #475569;
-    max-width: 180px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.history-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+}
+
+.history-time {
+    color: #94a3b8;
+    font-size: 0.8rem;
 }
 
 .history-ping {
@@ -318,13 +428,13 @@ body {
     padding: 4px 8px;
     border-radius: 6px;
     font-size: 0.85rem;
-    min-width: 60px;
+    min-width: 62px;
     text-align: center;
 }
 
-.ping-good { background: rgba(16, 185, 129, 0.1); }
-.ping-medium { background: rgba(245, 158, 11, 0.1); }
-.ping-bad { background: rgba(239, 68, 68, 0.1); }
+.history-ping.ping-good { background: rgba(16, 185, 129, 0.12); color: #047857; }
+.history-ping.ping-medium { background: rgba(245, 158, 11, 0.12); color: #b45309; }
+.history-ping.ping-bad { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
 
 /* Футер */
 .footer {
@@ -339,10 +449,6 @@ body {
     gap: 8px;
     font-size: 0.85rem;
     color: #64748b;
-}
-
-.status i {
-    font-size: 0.6rem;
 }
 
 .status-good { color: #10b981; }
@@ -368,6 +474,42 @@ body {
     background: #94a3b8;
 }
 
+/* Уведомления складываются в стопку, а не друг на друга */
+.notifications {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.notification {
+    max-width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: slideInRight 0.3s ease;
+}
+
+.notification-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.notification-error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+.notification-info { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+
+.notification.is-leaving {
+    animation: slideOutRight 0.3s ease forwards;
+}
+
 /* Анимации */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-10px); }
@@ -388,36 +530,26 @@ body {
     animation: pulse 0.3s ease;
 }
 
-/* Добавляем в конец файла popup.css */
-.ping-error {
-    color: #ef4444 !important;
-    font-weight: 700;
-    font-size: 1.8rem !important;
-}
-
-.notification {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    padding: 12px 16px;
-    border-radius: 8px;
-    color: white;
-    font-weight: 500;
-    z-index: 1000;
-    animation: slideInRight 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 300px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
 @keyframes slideInRight {
-    from { transform: translateX(100%); opacity: 0; }
+    from { transform: translateX(110%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
 }
 
 @keyframes slideOutRight {
     from { transform: translateX(0); opacity: 1; }
-    to { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(110%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    /* Крутилка — единственная анимация, которая несёт смысл */
+    .spin {
+        animation: spin 1.2s linear infinite !important;
+    }
 }

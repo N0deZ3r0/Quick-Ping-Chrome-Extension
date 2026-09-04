@@ -1,0 +1,6 @@
+# popup.js, popup.css, popup.html and manifest.json were stored with CRLF while
+# every other file used LF. Pinning the convention keeps a contributor's editor
+# from turning a one-line change into a whole-file diff.
+* text=auto eol=lf
+
+*.png binary

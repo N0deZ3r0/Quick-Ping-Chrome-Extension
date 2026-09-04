@@ -32,3 +32,9 @@ jobs:
 
       - name: Extension manifest
         run: node .github/scripts/validate.mjs manifest
+
+      - name: Page assets
+        run: node .github/scripts/validate.mjs html
+
+      - name: Translations
+        run: node .github/scripts/validate.mjs i18n

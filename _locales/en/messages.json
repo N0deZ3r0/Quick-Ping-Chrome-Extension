@@ -1,0 +1,109 @@
+{
+  "appName": {
+    "message": "Quick Ping",
+    "description": "Extension name shown in Chrome."
+  },
+  "appDesc": {
+    "message": "Check how fast any site responds, straight from the toolbar.",
+    "description": "Extension description shown in Chrome."
+  },
+  "urlPlaceholder": {
+    "message": "site.com"
+  },
+  "pingButton": {
+    "message": "Check response time"
+  },
+  "clearButton": {
+    "message": "Clear history"
+  },
+  "clearConfirm": {
+    "message": "Sure?",
+    "description": "Label on the clear button once it is armed for a second click."
+  },
+  "resultPlaceholder": {
+    "message": "Enter a site address"
+  },
+  "statLast": {
+    "message": "Last"
+  },
+  "statAverage": {
+    "message": "Average"
+  },
+  "historyTitle": {
+    "message": "History"
+  },
+  "historyEmpty": {
+    "message": "No history yet"
+  },
+  "statusReady": {
+    "message": "Ready"
+  },
+  "statusChecking": {
+    "message": "Checking..."
+  },
+  "statusError": {
+    "message": "Error"
+  },
+  "errorLabel": {
+    "message": "ERROR",
+    "description": "Shown in place of a number when a site did not respond."
+  },
+  "milliseconds": {
+    "message": "$MS$ ms",
+    "placeholders": {
+      "ms": {
+        "content": "$1",
+        "example": "42"
+      }
+    }
+  },
+  "toastResult": {
+    "message": "Response time: $MS$ ms",
+    "placeholders": {
+      "ms": {
+        "content": "$1",
+        "example": "42"
+      }
+    }
+  },
+  "toastInvalidUrl": {
+    "message": "Enter a valid site address"
+  },
+  "toastTimeout": {
+    "message": "No answer within $SECONDS$ s",
+    "placeholders": {
+      "seconds": {
+        "content": "$1",
+        "example": "5"
+      }
+    }
+  },
+  "toastUnreachable": {
+    "message": "Site did not respond"
+  },
+  "toastBusy": {
+    "message": "A check is already running"
+  },
+  "toastHistoryEmpty": {
+    "message": "History is already empty"
+  },
+  "toastConfirmClear": {
+    "message": "Click again to clear the history"
+  },
+  "toastHistoryCleared": {
+    "message": "History cleared"
+  },
+  "historyEntryTitle": {
+    "message": "$URL$ — HTTP $STATUS$",
+    "placeholders": {
+      "url": {
+        "content": "$1",
+        "example": "https://example.com/"
+      },
+      "status": {
+        "content": "$2",
+        "example": "200"
+      }
+    }
+  }
+}

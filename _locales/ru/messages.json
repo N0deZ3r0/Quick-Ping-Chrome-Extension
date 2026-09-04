@@ -1,0 +1,109 @@
+{
+  "appName": {
+    "message": "Quick Ping",
+    "description": "Название расширения в Chrome."
+  },
+  "appDesc": {
+    "message": "Быстрая проверка отклика сайтов прямо из панели браузера.",
+    "description": "Описание расширения в Chrome."
+  },
+  "urlPlaceholder": {
+    "message": "site.com"
+  },
+  "pingButton": {
+    "message": "Проверить отклик"
+  },
+  "clearButton": {
+    "message": "Очистить историю"
+  },
+  "clearConfirm": {
+    "message": "Точно?",
+    "description": "Надпись на кнопке очистки после первого нажатия."
+  },
+  "resultPlaceholder": {
+    "message": "Введите адрес сайта"
+  },
+  "statLast": {
+    "message": "Последний"
+  },
+  "statAverage": {
+    "message": "Средний"
+  },
+  "historyTitle": {
+    "message": "История"
+  },
+  "historyEmpty": {
+    "message": "Истории пока нет"
+  },
+  "statusReady": {
+    "message": "Готов"
+  },
+  "statusChecking": {
+    "message": "Проверка..."
+  },
+  "statusError": {
+    "message": "Ошибка"
+  },
+  "errorLabel": {
+    "message": "ERROR",
+    "description": "Показывается вместо числа, если сайт не ответил."
+  },
+  "milliseconds": {
+    "message": "$MS$ мс",
+    "placeholders": {
+      "ms": {
+        "content": "$1",
+        "example": "42"
+      }
+    }
+  },
+  "toastResult": {
+    "message": "Отклик: $MS$ мс",
+    "placeholders": {
+      "ms": {
+        "content": "$1",
+        "example": "42"
+      }
+    }
+  },
+  "toastInvalidUrl": {
+    "message": "Введите корректный адрес сайта"
+  },
+  "toastTimeout": {
+    "message": "Нет ответа за $SECONDS$ с",
+    "placeholders": {
+      "seconds": {
+        "content": "$1",
+        "example": "5"
+      }
+    }
+  },
+  "toastUnreachable": {
+    "message": "Сайт не ответил"
+  },
+  "toastBusy": {
+    "message": "Проверка уже идёт"
+  },
+  "toastHistoryEmpty": {
+    "message": "История и так пуста"
+  },
+  "toastConfirmClear": {
+    "message": "Нажмите ещё раз, чтобы очистить историю"
+  },
+  "toastHistoryCleared": {
+    "message": "История очищена"
+  },
+  "historyEntryTitle": {
+    "message": "$URL$ — HTTP $STATUS$",
+    "placeholders": {
+      "url": {
+        "content": "$1",
+        "example": "https://example.com/"
+      },
+      "status": {
+        "content": "$2",
+        "example": "200"
+      }
+    }
+  }
+}

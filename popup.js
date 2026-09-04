@@ -1,368 +1,476 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Элементы
+'use strict';
+
+/**
+ * Quick Ping — измеряет время до первого байта HTTP-ответа.
+ *
+ * Это не ICMP-пинг: расширение браузера не умеет слать ICMP. Мы делаем один
+ * GET и засекаем, сколько прошло до прихода заголовков ответа, после чего
+ * сбрасываем тело, не скачивая его. В сумме это DNS + TCP + TLS + ответ
+ * сервера — то есть ровно та задержка, которую пользователь и ощущает.
+ */
+
+const PING_TIMEOUT_MS = 5000;
+const HISTORY_LIMIT = 10;
+const GOOD_THRESHOLD_MS = 100;
+const MEDIUM_THRESHOLD_MS = 300;
+const NOTIFICATION_TTL_MS = 3000;
+const NOTIFICATION_LIMIT = 3;
+const CLEAR_ARMED_MS = 3500;
+const LABEL_MAX_LENGTH = 200;
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+document.addEventListener('DOMContentLoaded', () => {
     const urlInput = document.getElementById('urlInput');
     const pingBtn = document.getElementById('pingBtn');
+    const pingBtnIcon = document.getElementById('pingBtnIcon');
     const clearBtn = document.getElementById('clearBtn');
     const currentResult = document.getElementById('currentResult');
     const lastPing = document.getElementById('lastPing');
     const avgPing = document.getElementById('avgPing');
     const historyList = document.getElementById('historyList');
-    const status = document.getElementById('status');
-    const quickButtons = document.querySelectorAll('.quick-btn');
+    const statusIcon = document.getElementById('statusIcon');
+    const statusText = document.getElementById('statusText');
+    const notifications = document.getElementById('notifications');
+    const quickButtons = Array.from(document.querySelectorAll('.quick-btn'));
 
-    // Данные
+    const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+
     let pingHistory = [];
+    let isPinging = false;
+    let clearArmedTimer = null;
 
-    // Инициализация
-    loadData();
-    urlInput.focus();
+    applyTranslations();
+    init();
 
-    // События
-    pingBtn.addEventListener('click', () => pingSite(urlInput.value));
-    urlInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') pingSite(urlInput.value);
+    pingBtn.addEventListener('click', () => startPing(urlInput.value));
+    urlInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.isComposing) startPing(urlInput.value);
     });
-    
-    clearBtn.addEventListener('click', clearHistory);
-    
-    // Быстрые кнопки
-    quickButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            urlInput.value = btn.dataset.url;
-            pingSite(btn.dataset.url);
+    clearBtn.addEventListener('click', handleClearClick);
+    quickButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            urlInput.value = button.dataset.url;
+            startPing(button.dataset.url);
         });
     });
 
-    // Основная функция проверки пинга
-    async function pingSite(url) {
-        if (!url || !isValidUrl(url)) {
-            showMessage('Введите корректный адрес сайта', 'error');
+    async function init() {
+        await loadData();
+        renderAll();
+        setStatus(t('statusReady'), 'good');
+        urlInput.focus();
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Локализация
+     * ------------------------------------------------------------------ */
+
+    function t(key, ...substitutions) {
+        return chrome.i18n.getMessage(key, substitutions.map(String)) || key;
+    }
+
+    function applyTranslations() {
+        document.documentElement.lang = chrome.i18n.getUILanguage();
+
+        const targets = [
+            ['data-i18n', 'i18n', null],
+            ['data-i18n-title', 'i18nTitle', 'title'],
+            ['data-i18n-placeholder', 'i18nPlaceholder', 'placeholder'],
+            ['data-i18n-aria', 'i18nAria', 'aria-label'],
+        ];
+
+        for (const [selector, datasetKey, attribute] of targets) {
+            for (const node of document.querySelectorAll(`[${selector}]`)) {
+                const message = t(node.dataset[datasetKey]);
+                if (attribute) node.setAttribute(attribute, message);
+                else node.textContent = message;
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Разбор адреса
+     * ------------------------------------------------------------------ */
+
+    const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+    const TLD_RE = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i;
+    // Октеты уже проверил разбор URL — здесь достаточно отличить IP от домена.
+    const IPV4_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+    function isDomainName(hostname) {
+        if (hostname.length > 253) return false;
+        const labels = hostname.split('.');
+        if (labels.length < 2) return false;
+        if (!labels.every((label) => LABEL_RE.test(label))) return false;
+        return TLD_RE.test(labels[labels.length - 1]);
+    }
+
+    /** Приводит ввод к цели проверки; null — если адрес непригоден. */
+    function parseTarget(raw) {
+        const input = String(raw ?? '').trim();
+        if (!input || /\s/.test(input)) return null;
+
+        const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
+
+        let url;
+        try {
+            url = new URL(candidate);
+        } catch {
+            return null;
+        }
+
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+
+        const hostname = url.hostname;
+        const isIpv6 = hostname.startsWith('[') && hostname.endsWith(']');
+        const isIpv4 = IPV4_RE.test(hostname);
+        if (!isIpv6 && !isIpv4 && hostname !== 'localhost' && !isDomainName(hostname)) return null;
+
+        url.hash = '';
+        url.username = '';
+        url.password = '';
+
+        const path = url.pathname === '/' ? '' : url.pathname;
+        const label = `${url.host}${path}${url.search}`.slice(0, LABEL_MAX_LENGTH);
+
+        return { href: url.href, label };
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Измерение
+     * ------------------------------------------------------------------ */
+
+    async function measure(href) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+        const startedAt = performance.now();
+
+        try {
+            const response = await fetch(href, {
+                method: 'GET',
+                cache: 'no-store',
+                redirect: 'follow',
+                credentials: 'omit',
+                referrerPolicy: 'no-referrer',
+                signal: controller.signal,
+            });
+
+            const ms = Math.round(performance.now() - startedAt);
+
+            // Заголовки получены — тело не нужно, освобождаем соединение.
+            response.body?.cancel().catch(() => {});
+
+            return { ok: true, ms, status: response.status };
+        } catch {
+            return { ok: false, timedOut: controller.signal.aborted };
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    async function startPing(rawUrl) {
+        if (isPinging) {
+            notify(t('toastBusy'), 'info');
             return;
         }
 
-        // Нормализация URL
-        const cleanUrl = cleanUrlInput(url);
-        const fullUrl = `https://${cleanUrl}`;
+        const target = parseTarget(rawUrl);
+        if (!target) {
+            notify(t('toastInvalidUrl'), 'error');
+            urlInput.focus();
+            urlInput.select();
+            return;
+        }
 
-        // Обновление UI
-        updateButton(true);
-        updateStatus('Проверка...', 'loading');
+        setBusy(true);
+        setStatus(t('statusChecking'), 'loading');
 
         try {
-            // Проверка доступности
-            const isAccessible = await checkAccessibility(fullUrl);
-            if (!isAccessible) {
-                // Показываем ошибку в основном окне
-                showErrorResult(cleanUrl);
-                showMessage('Сайт не отвечает', 'error');
-                updateStatus('Ошибка', 'bad');
-                updateButton(false);
-                return;
-            }
+            const outcome = await measure(target.href);
 
-            // Измерение пинга
-            const ping = await measurePing(fullUrl);
-            
-            if (ping > 0) {
-                // Сохранение результата
-                const result = {
-                    url: cleanUrl,
-                    ping: ping,
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    fullUrl: fullUrl,
-                    error: false
-                };
-                
-                saveResult(result);
-                updateCurrentResult(result);
-                updateStats();
-                showMessage(`Пинг: ${ping} мс`, 'success');
-                updateStatus(`${ping} мс`, getPingStatus(ping));
+            addRecord({
+                label: target.label,
+                href: target.href,
+                ms: outcome.ok ? outcome.ms : null,
+                status: outcome.ok ? outcome.status : null,
+                ok: outcome.ok,
+                at: Date.now(),
+            });
+            renderAll();
+
+            if (outcome.ok) {
+                notify(t('toastResult', outcome.ms), 'success');
+                setStatus(t('milliseconds', outcome.ms), toneFor(outcome.ms));
             } else {
-                showErrorResult(cleanUrl);
-                showMessage('Ошибка измерения', 'error');
-                updateStatus('Ошибка', 'bad');
+                const seconds = Math.round(PING_TIMEOUT_MS / 1000);
+                notify(outcome.timedOut ? t('toastTimeout', seconds) : t('toastUnreachable'), 'error');
+                setStatus(t('statusError'), 'bad');
             }
-
-        } catch (error) {
-            console.error('Ошибка:', error);
-            showErrorResult(cleanUrl);
-            showMessage('Ошибка проверки', 'error');
-            updateStatus('Ошибка', 'bad');
         } finally {
-            updateButton(false);
+            setBusy(false);
         }
     }
 
-    // Функция для показа ошибки в основном окне
-    function showErrorResult(url) {
-        const result = {
-            url: url,
-            ping: 'error',
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            error: true
-        };
-        
-        saveResult(result);
-        updateCurrentResult(result);
-        updateStats();
-    }
+    /* ------------------------------------------------------------------ *
+     * Состояние
+     * ------------------------------------------------------------------ */
 
-    // Проверка доступности сайта
-    async function checkAccessibility(url) {
-        return new Promise((resolve) => {
-            fetch(url, {
-                method: 'HEAD',
-                mode: 'no-cors',
-                cache: 'no-store'
-            })
-            .then(() => resolve(true))
-            .catch(() => {
-                // Если CORS ошибка, все равно пробуем
-                const img = new Image();
-                img.onload = () => resolve(true);
-                img.onerror = () => resolve(false);
-                img.src = url + '?t=' + Date.now();
-                setTimeout(() => resolve(false), 2000);
-            });
-        });
-    }
-
-    // Измерение пинга
-    async function measurePing(url) {
-        return new Promise((resolve) => {
-            const startTime = performance.now();
-            const img = new Image();
-            
-            img.onload = img.onerror = () => {
-                const endTime = performance.now();
-                const ping = Math.round(endTime - startTime);
-                resolve(ping > 10 ? ping : 50); // Минимум 50мс
-            };
-            
-            setTimeout(() => resolve(0), 3000);
-            img.src = url + '/favicon.ico?t=' + Date.now();
-        });
-    }
-
-    // Вспомогательные функции
-    function isValidUrl(url) {
-        return url && url.includes('.') && url.length > 3 && !url.includes(' ');
-    }
-
-    function cleanUrlInput(url) {
-        return url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-    }
-
-    function getPingStatus(ping) {
-        if (ping === 'error') return 'bad';
-        if (ping < 100) return 'good';
-        if (ping < 300) return 'medium';
+    function toneFor(ms) {
+        if (!Number.isFinite(ms)) return 'bad';
+        if (ms < GOOD_THRESHOLD_MS) return 'good';
+        if (ms < MEDIUM_THRESHOLD_MS) return 'medium';
         return 'bad';
     }
 
-    // Работа с результатами
-    function saveResult(result) {
-        pingHistory.unshift(result);
-        if (pingHistory.length > 10) {
-            pingHistory = pingHistory.slice(0, 10);
-        }
+    function addRecord(record) {
+        pingHistory.unshift(record);
+        pingHistory = pingHistory.slice(0, HISTORY_LIMIT);
         saveData();
-        updateHistoryList();
-        updateStats();
     }
 
-    function updateCurrentResult(result) {
-        if (result.error || result.ping === 'error') {
-            // Показываем ошибку
-            currentResult.innerHTML = `
-                <div class="ping-result fade-in">
-                    <div class="ping-value ping-error">ERROR</div>
-                    <div class="ping-url">${result.url}</div>
-                </div>
-            `;
-        } else {
-            // Показываем нормальный пинг
-            const pingClass = getPingStatus(result.ping);
-            currentResult.innerHTML = `
-                <div class="ping-result fade-in">
-                    <div class="ping-value ${pingClass}">${result.ping} мс</div>
-                    <div class="ping-url">${result.url}</div>
-                </div>
-            `;
-        }
+    function isValidRecord(value) {
+        return Boolean(
+            value &&
+            typeof value === 'object' &&
+            typeof value.label === 'string' &&
+            typeof value.href === 'string' &&
+            typeof value.ok === 'boolean' &&
+            Number.isFinite(value.at) &&
+            (value.ms === null || Number.isFinite(value.ms)) &&
+            (value.status === null || Number.isFinite(value.status))
+        );
     }
 
-    function updateStats() {
-        if (pingHistory.length > 0) {
-            const last = pingHistory[0];
-            
-            // Обновляем последний пинг
-            if (last.error || last.ping === 'error') {
-                lastPing.textContent = 'ERROR';
-                lastPing.className = 'stat-value ping-bad';
-            } else {
-                lastPing.textContent = `${last.ping} мс`;
-                lastPing.className = `stat-value ${getPingStatus(last.ping)}`;
-            }
-            
-            // Обновляем средний пинг (только для успешных проверок)
-            const successfulPings = pingHistory.filter(r => !r.error && r.ping !== 'error');
-            if (successfulPings.length > 0) {
-                const avg = Math.round(successfulPings.reduce((sum, r) => sum + r.ping, 0) / successfulPings.length);
-                avgPing.textContent = `${avg} мс`;
-                avgPing.className = `stat-value ${getPingStatus(avg)}`;
-            } else {
-                avgPing.textContent = '-';
-            }
-        } else {
-            lastPing.textContent = '-';
-            avgPing.textContent = '-';
-        }
-    }
-
-    function updateHistoryList() {
-        if (pingHistory.length === 0) {
-            historyList.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Нет истории</div>';
-            return;
-        }
-
-        historyList.innerHTML = pingHistory.map(item => {
-            if (item.error || item.ping === 'error') {
-                return `
-                    <div class="history-item">
-                        <span class="history-url" title="${item.url}">${item.url}</span>
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <span class="history-time">${item.time}</span>
-                            <span class="history-ping ping-bad">ERROR</span>
-                        </div>
-                    </div>
-                `;
-            } else {
-                const pingClass = getPingStatus(item.ping);
-                return `
-                    <div class="history-item">
-                        <span class="history-url" title="${item.url}">${item.url}</span>
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <span class="history-time">${item.time}</span>
-                            <span class="history-ping ${pingClass}">${item.ping} мс</span>
-                        </div>
-                    </div>
-                `;
-            }
-        }).join('');
-    }
-
-    function clearHistory() {
-        if (pingHistory.length === 0) {
-            showMessage('История пуста', 'info');
-            return;
-        }
-
-        if (confirm('Очистить историю проверок?')) {
+    async function loadData() {
+        try {
+            const stored = await chrome.storage.local.get({ pingHistory: [] });
+            pingHistory = Array.isArray(stored.pingHistory)
+                ? stored.pingHistory.filter(isValidRecord).slice(0, HISTORY_LIMIT)
+                : [];
+        } catch (error) {
+            console.warn('Quick Ping: не удалось прочитать историю', error);
             pingHistory = [];
-            saveData();
-            updateStats();
-            updateHistoryList();
-            currentResult.innerHTML = `
-                <div class="result-placeholder">
-                    <i class="fas fa-satellite-dish"></i>
-                    <p>Введите адрес сайта</p>
-                </div>
-            `;
-            updateStatus('Готов', 'good');
-            showMessage('История очищена', 'success');
         }
     }
 
-    // UI функции
-    function updateButton(isLoading) {
-        pingBtn.disabled = isLoading;
-        pingBtn.innerHTML = isLoading ? 
-            '<i class="fas fa-spinner fa-spin"></i>' : 
-            '<i class="fas fa-play"></i>';
-        
-        if (!isLoading) {
+    function saveData() {
+        chrome.storage.local.set({ pingHistory }).catch((error) => {
+            console.warn('Quick Ping: не удалось сохранить историю', error);
+        });
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Отрисовка
+     * ------------------------------------------------------------------ */
+
+    function renderAll() {
+        renderCurrentResult();
+        renderStats();
+        renderHistory();
+    }
+
+    function renderCurrentResult() {
+        currentResult.replaceChildren();
+
+        const latest = pingHistory[0];
+        if (!latest) {
+            currentResult.append(
+                element('div', { class: 'result-placeholder' },
+                    icon('i-globe', 'icon icon-xl'),
+                    element('p', { text: t('resultPlaceholder') })
+                )
+            );
+            return;
+        }
+
+        const value = latest.ok
+            ? element('div', { class: `ping-value ping-${toneFor(latest.ms)}`, text: t('milliseconds', latest.ms) })
+            : element('div', { class: 'ping-value ping-error', text: t('errorLabel') });
+
+        currentResult.append(
+            element('div', { class: 'ping-result fade-in' },
+                value,
+                element('div', { class: 'ping-url', title: latest.href, text: latest.label })
+            )
+        );
+    }
+
+    function renderStats() {
+        const latest = pingHistory[0];
+        if (!latest) {
+            setStatValue(lastPing, '-', null);
+        } else if (latest.ok) {
+            setStatValue(lastPing, t('milliseconds', latest.ms), toneFor(latest.ms));
+        } else {
+            setStatValue(lastPing, t('errorLabel'), 'bad');
+        }
+
+        const successful = pingHistory.filter((record) => record.ok);
+        if (successful.length === 0) {
+            setStatValue(avgPing, '-', null);
+            return;
+        }
+
+        const total = successful.reduce((sum, record) => sum + record.ms, 0);
+        const average = Math.round(total / successful.length);
+        setStatValue(avgPing, t('milliseconds', average), toneFor(average));
+    }
+
+    function setStatValue(node, text, tone) {
+        node.textContent = text;
+        node.className = tone ? `stat-value ping-${tone}` : 'stat-value';
+    }
+
+    function renderHistory() {
+        historyList.replaceChildren();
+
+        if (pingHistory.length === 0) {
+            historyList.append(element('div', { class: 'history-empty', text: t('historyEmpty') }));
+            return;
+        }
+
+        for (const record of pingHistory) {
+            const badge = record.ok
+                ? element('span', {
+                    class: `history-ping ping-${toneFor(record.ms)}`,
+                    text: t('milliseconds', record.ms),
+                })
+                : element('span', { class: 'history-ping ping-bad', text: t('errorLabel') });
+
+            const title = record.ok
+                ? t('historyEntryTitle', record.href, record.status)
+                : record.href;
+
+            historyList.append(
+                element('div', { class: 'history-item' },
+                    element('span', { class: 'history-url', title, text: record.label }),
+                    element('div', { class: 'history-meta' },
+                        element('span', {
+                            class: 'history-time',
+                            text: timeFormatter.format(new Date(record.at)),
+                        }),
+                        badge
+                    )
+                )
+            );
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Очистка истории — без confirm(), который умеет закрывать попап
+     * ------------------------------------------------------------------ */
+
+    function handleClearClick() {
+        if (pingHistory.length === 0) {
+            notify(t('toastHistoryEmpty'), 'info');
+            return;
+        }
+
+        if (!clearBtn.classList.contains('is-armed')) {
+            armClearButton();
+            notify(t('toastConfirmClear'), 'info');
+            return;
+        }
+
+        disarmClearButton();
+        pingHistory = [];
+        saveData();
+        renderAll();
+        setStatus(t('statusReady'), 'good');
+        notify(t('toastHistoryCleared'), 'success');
+    }
+
+    function armClearButton() {
+        clearBtn.classList.add('is-armed');
+        clearTimeout(clearArmedTimer);
+        clearArmedTimer = setTimeout(disarmClearButton, CLEAR_ARMED_MS);
+    }
+
+    function disarmClearButton() {
+        clearTimeout(clearArmedTimer);
+        clearArmedTimer = null;
+        clearBtn.classList.remove('is-armed');
+    }
+
+    /* ------------------------------------------------------------------ *
+     * UI
+     * ------------------------------------------------------------------ */
+
+    function setBusy(busy) {
+        isPinging = busy;
+        pingBtn.disabled = busy;
+        urlInput.disabled = busy;
+        quickButtons.forEach((button) => { button.disabled = busy; });
+
+        setIcon(pingBtnIcon, busy ? 'i-spinner' : 'i-play');
+        pingBtnIcon.classList.toggle('spin', busy);
+
+        if (!busy) {
             pingBtn.classList.add('pulse');
             setTimeout(() => pingBtn.classList.remove('pulse'), 300);
+            urlInput.focus();
         }
     }
 
-    function updateStatus(message, type) {
-        const icon = status.querySelector('i');
-        const text = status.querySelector('span');
-        
-        text.textContent = message;
-        status.className = 'status';
-        
-        if (type === 'good') {
-            status.classList.add('status-good');
-            icon.className = 'fas fa-circle';
-        } else if (type === 'medium') {
-            status.classList.add('status-medium');
-            icon.className = 'fas fa-circle';
-        } else if (type === 'bad') {
-            status.classList.add('status-bad');
-            icon.className = 'fas fa-circle';
-        } else if (type === 'loading') {
-            status.classList.add('status-loading');
-            icon.className = 'fas fa-circle-notch fa-spin';
-        }
+    function setStatus(message, tone) {
+        statusText.textContent = message;
+        // У SVGElement className доступен только на чтение — только setAttribute.
+        statusIcon.setAttribute('class', `icon icon-xs status-${tone}`);
+        setIcon(statusIcon, tone === 'loading' ? 'i-spinner' : 'i-dot');
+        statusIcon.classList.toggle('spin', tone === 'loading');
     }
 
-    function showMessage(message, type) {
-        // Создаем уведомление
-        const notification = document.createElement('div');
-        notification.className = 'notification';
-        
-        // Выбираем цвет в зависимости от типа
-        if (type === 'success') {
-            notification.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-        } else if (type === 'error') {
-            notification.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-        } else {
-            notification.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+    const NOTIFICATION_ICONS = { success: 'i-check', error: 'i-alert', info: 'i-info' };
+
+    function notify(message, type) {
+        while (notifications.childElementCount >= NOTIFICATION_LIMIT) {
+            notifications.firstElementChild.remove();
         }
-        
-        // Иконка
-        const icon = type === 'success' ? 'fa-check-circle' : 
-                     type === 'error' ? 'fa-exclamation-circle' : 
-                     'fa-info-circle';
-        
-        notification.innerHTML = `
-            <i class="fas ${icon}"></i>
-            <span>${message}</span>
-        `;
-        
-        // Добавляем на страницу
-        document.body.appendChild(notification);
-        
-        // Удаляем через 3 секунды
+
+        const node = element('div', { class: `notification notification-${type}` },
+            icon(NOTIFICATION_ICONS[type] ?? NOTIFICATION_ICONS.info, 'icon icon-sm'),
+            element('span', { text: message })
+        );
+
+        notifications.append(node);
+
         setTimeout(() => {
-            notification.style.animation = 'slideOutRight 0.3s ease forwards';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 300);
-        }, 3000);
+            node.classList.add('is-leaving');
+            node.addEventListener('animationend', () => node.remove(), { once: true });
+            setTimeout(() => node.remove(), 500);
+        }, NOTIFICATION_TTL_MS);
     }
 
-    // Работа с хранилищем
-    function saveData() {
-        chrome.storage.local.set({
-            pingHistory: pingHistory
-        });
+    /* ------------------------------------------------------------------ *
+     * Помощники DOM. Никакого innerHTML: сюда приходит пользовательский
+     * ввод, и склейка разметки строкой уже давала XSS через title="...".
+     * ------------------------------------------------------------------ */
+
+    function element(tag, attributes = {}, ...children) {
+        const node = document.createElement(tag);
+
+        for (const [name, value] of Object.entries(attributes)) {
+            if (value === undefined || value === null) continue;
+            if (name === 'text') node.textContent = value;
+            else if (name === 'class') node.className = value;
+            else node.setAttribute(name, value);
+        }
+
+        node.append(...children.filter(Boolean));
+        return node;
     }
 
-    function loadData() {
-        chrome.storage.local.get(['pingHistory'], (data) => {
-            if (data.pingHistory) {
-                pingHistory = data.pingHistory;
-                updateStats();
-                updateHistoryList();
-            }
-            updateStatus('Готов', 'good');
-        });
+    function icon(name, className = 'icon') {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', className);
+        const use = document.createElementNS(SVG_NS, 'use');
+        use.setAttribute('href', `#${name}`);
+        svg.append(use);
+        return svg;
+    }
+
+    function setIcon(svg, name) {
+        svg.querySelector('use')?.setAttribute('href', `#${name}`);
     }
 });
