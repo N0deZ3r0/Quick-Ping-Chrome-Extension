@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Tooling metadata only. The extension itself ships as plain files and needs no build step and no dependencies; this file exists so Node treats the sources as ES modules when running the tests.",
   "scripts": {
-    "test": "node --test \"tests/*.test.mjs\"",
+    "test": "node --test",
     "validate": "node .github/scripts/validate.mjs js && node .github/scripts/validate.mjs json && node .github/scripts/validate.mjs manifest && node .github/scripts/validate.mjs html && node .github/scripts/validate.mjs i18n"
   },
   "license": "MIT"
