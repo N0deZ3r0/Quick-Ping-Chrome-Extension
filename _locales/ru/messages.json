@@ -4,22 +4,46 @@
     "description": "Название расширения в Chrome."
   },
   "appDesc": {
-    "message": "Быстрая проверка отклика сайтов прямо из панели браузера.",
+    "message": "Быстрая проверка отклика сайтов и наблюдение за нужными хостами.",
     "description": "Описание расширения в Chrome."
   },
+  "commandOpen": {
+    "message": "Открыть Quick Ping"
+  },
+
+  "tabCheck": {
+    "message": "Проверка"
+  },
+  "tabWatch": {
+    "message": "Наблюдение"
+  },
+
   "urlPlaceholder": {
     "message": "site.com"
   },
   "pingButton": {
     "message": "Проверить отклик"
   },
-  "clearButton": {
-    "message": "Очистить историю"
+  "currentTab": {
+    "message": "Эта вкладка"
   },
-  "clearConfirm": {
-    "message": "Точно?",
-    "description": "Надпись на кнопке очистки после первого нажатия."
+  "currentTabHint": {
+    "message": "Проверить сайт, открытый в активной вкладке"
   },
+  "samplesLabel": {
+    "message": "Замеров"
+  },
+  "samplesHint": {
+    "message": "Сколько запросов отправить. Больше замеров — устойчивее число и виден джиттер."
+  },
+  "pinCurrent": {
+    "message": "Закрепить адрес из поля"
+  },
+  "unpin": {
+    "message": "Открепить $HOST$",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+
   "resultPlaceholder": {
     "message": "Введите адрес сайта"
   },
@@ -35,6 +59,48 @@
   "historyEmpty": {
     "message": "Истории пока нет"
   },
+  "exportHistory": {
+    "message": "Скопировать историю в CSV"
+  },
+  "clearButton": {
+    "message": "Очистить историю"
+  },
+  "clearConfirm": {
+    "message": "Точно?",
+    "description": "Надпись на кнопке очистки после первого нажатия."
+  },
+
+  "watchTitle": {
+    "message": "Под наблюдением"
+  },
+  "watchHint": {
+    "message": "Проверяется в фоне примерно с выбранной периодичностью. Уведомление приходит только когда хост меняет состояние — упал или снова отвечает."
+  },
+  "watchAdd": {
+    "message": "Наблюдать за этим адресом"
+  },
+  "watchIntervalHint": {
+    "message": "Как часто проверять"
+  },
+  "watchEmpty": {
+    "message": "Наблюдение ни за чем не ведётся"
+  },
+  "watchRemove": {
+    "message": "Перестать наблюдать за $HOST$",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+  "watchChecked": {
+    "message": "проверено в $TIME$",
+    "placeholders": { "time": { "content": "$1", "example": "18:42" } }
+  },
+  "watchPending": {
+    "message": "ещё не проверялся"
+  },
+  "intervalMinutes": {
+    "message": "$COUNT$ мин",
+    "placeholders": { "count": { "content": "$1", "example": "5" } }
+  },
+
   "statusReady": {
     "message": "Готов"
   },
@@ -50,39 +116,88 @@
   },
   "milliseconds": {
     "message": "$MS$ мс",
+    "placeholders": { "ms": { "content": "$1", "example": "42" } }
+  },
+
+  "chipCold": {
+    "message": "холодный $MS$ мс",
+    "description": "Первый замер, несущий на себе DNS и TLS-рукопожатие.",
+    "placeholders": { "ms": { "content": "$1", "example": "210" } }
+  },
+  "chipWarm": {
+    "message": "тёплый $MS$ мс",
+    "description": "Медиана замеров, переиспользовавших открытое соединение.",
+    "placeholders": { "ms": { "content": "$1", "example": "64" } }
+  },
+  "chipJitter": {
+    "message": "джиттер ±$MS$ мс",
+    "placeholders": { "ms": { "content": "$1", "example": "8" } }
+  },
+  "chipRange": {
+    "message": "разброс $MIN$–$MAX$ мс",
     "placeholders": {
-      "ms": {
-        "content": "$1",
-        "example": "42"
-      }
+      "min": { "content": "$1", "example": "60" },
+      "max": { "content": "$2", "example": "215" }
     }
   },
+  "chipSamples": {
+    "message": "замеров: $COUNT$",
+    "placeholders": { "count": { "content": "$1", "example": "3" } }
+  },
+  "chipHttp": {
+    "message": "HTTP $STATUS$",
+    "placeholders": { "status": { "content": "$1", "example": "403" } }
+  },
+  "reasonTimeout": {
+    "message": "Ответ не пришёл вовремя"
+  },
+  "reasonNetwork": {
+    "message": "Не удалось соединиться"
+  },
+
   "toastResult": {
     "message": "Отклик: $MS$ мс",
-    "placeholders": {
-      "ms": {
-        "content": "$1",
-        "example": "42"
-      }
-    }
+    "placeholders": { "ms": { "content": "$1", "example": "42" } }
   },
   "toastInvalidUrl": {
     "message": "Введите корректный адрес сайта"
   },
   "toastTimeout": {
-    "message": "Нет ответа за $SECONDS$ с",
-    "placeholders": {
-      "seconds": {
-        "content": "$1",
-        "example": "5"
-      }
-    }
+    "message": "Хост принял соединение, но ответа не прислал"
   },
   "toastUnreachable": {
     "message": "Сайт не ответил"
   },
   "toastBusy": {
     "message": "Проверка уже идёт"
+  },
+  "toastNoTab": {
+    "message": "Не удалось прочитать активную вкладку"
+  },
+  "toastTabNotPingable": {
+    "message": "У этой страницы нет адреса, который можно проверить"
+  },
+  "toastPinAdded": {
+    "message": "$HOST$ закреплён",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+  "toastPinExists": {
+    "message": "Этот адрес уже закреплён"
+  },
+  "toastPinLimit": {
+    "message": "Закрепить можно $COUNT$ адресов",
+    "placeholders": { "count": { "content": "$1", "example": "6" } }
+  },
+  "toastWatchAdded": {
+    "message": "Наблюдаю за $HOST$",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+  "toastWatchExists": {
+    "message": "За этим адресом уже ведётся наблюдение"
+  },
+  "toastWatchLimit": {
+    "message": "Наблюдать можно за $COUNT$ адресами",
+    "placeholders": { "count": { "content": "$1", "example": "10" } }
   },
   "toastHistoryEmpty": {
     "message": "История и так пуста"
@@ -93,17 +208,29 @@
   "toastHistoryCleared": {
     "message": "История очищена"
   },
-  "historyEntryTitle": {
-    "message": "$URL$ — HTTP $STATUS$",
+  "toastExported": {
+    "message": "Скопировано строк в CSV: $COUNT$",
+    "placeholders": { "count": { "content": "$1", "example": "12" } }
+  },
+  "toastExportFailed": {
+    "message": "Не удалось записать в буфер обмена"
+  },
+
+  "notifyUpTitle": {
+    "message": "Снова отвечает"
+  },
+  "notifyDownTitle": {
+    "message": "Не отвечает"
+  },
+  "notifyUp": {
+    "message": "$HOST$ снова отвечает — $MS$ мс",
     "placeholders": {
-      "url": {
-        "content": "$1",
-        "example": "https://example.com/"
-      },
-      "status": {
-        "content": "$2",
-        "example": "200"
-      }
+      "host": { "content": "$1", "example": "github.com" },
+      "ms": { "content": "$2", "example": "64" }
     }
+  },
+  "notifyDown": {
+    "message": "$HOST$ перестал отвечать",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
   }
 }

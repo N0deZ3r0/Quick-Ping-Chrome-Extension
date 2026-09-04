@@ -4,22 +4,46 @@
     "description": "Extension name shown in Chrome."
   },
   "appDesc": {
-    "message": "Check how fast any site responds, straight from the toolbar.",
+    "message": "Check how fast any site responds, and watch the ones you care about.",
     "description": "Extension description shown in Chrome."
   },
+  "commandOpen": {
+    "message": "Open Quick Ping"
+  },
+
+  "tabCheck": {
+    "message": "Check"
+  },
+  "tabWatch": {
+    "message": "Watch"
+  },
+
   "urlPlaceholder": {
     "message": "site.com"
   },
   "pingButton": {
     "message": "Check response time"
   },
-  "clearButton": {
-    "message": "Clear history"
+  "currentTab": {
+    "message": "This tab"
   },
-  "clearConfirm": {
-    "message": "Sure?",
-    "description": "Label on the clear button once it is armed for a second click."
+  "currentTabHint": {
+    "message": "Check the site open in the active tab"
   },
+  "samplesLabel": {
+    "message": "Samples"
+  },
+  "samplesHint": {
+    "message": "How many requests to send. More samples give a steadier number and a jitter reading."
+  },
+  "pinCurrent": {
+    "message": "Pin the address in the field"
+  },
+  "unpin": {
+    "message": "Unpin $HOST$",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+
   "resultPlaceholder": {
     "message": "Enter a site address"
   },
@@ -35,6 +59,48 @@
   "historyEmpty": {
     "message": "No history yet"
   },
+  "exportHistory": {
+    "message": "Copy history as CSV"
+  },
+  "clearButton": {
+    "message": "Clear history"
+  },
+  "clearConfirm": {
+    "message": "Sure?",
+    "description": "Label on the clear button once it is armed for a second click."
+  },
+
+  "watchTitle": {
+    "message": "Watched"
+  },
+  "watchHint": {
+    "message": "Checked in the background, roughly on the interval you pick. You get a notification only when a host changes state — goes down, or comes back."
+  },
+  "watchAdd": {
+    "message": "Start watching this address"
+  },
+  "watchIntervalHint": {
+    "message": "How often to check"
+  },
+  "watchEmpty": {
+    "message": "Nothing is being watched"
+  },
+  "watchRemove": {
+    "message": "Stop watching $HOST$",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+  "watchChecked": {
+    "message": "checked at $TIME$",
+    "placeholders": { "time": { "content": "$1", "example": "18:42" } }
+  },
+  "watchPending": {
+    "message": "not checked yet"
+  },
+  "intervalMinutes": {
+    "message": "$COUNT$ min",
+    "placeholders": { "count": { "content": "$1", "example": "5" } }
+  },
+
   "statusReady": {
     "message": "Ready"
   },
@@ -50,39 +116,88 @@
   },
   "milliseconds": {
     "message": "$MS$ ms",
+    "placeholders": { "ms": { "content": "$1", "example": "42" } }
+  },
+
+  "chipCold": {
+    "message": "cold $MS$ ms",
+    "description": "First sample, which carries the DNS and TLS handshake.",
+    "placeholders": { "ms": { "content": "$1", "example": "210" } }
+  },
+  "chipWarm": {
+    "message": "warm $MS$ ms",
+    "description": "Median of the samples that reused the open connection.",
+    "placeholders": { "ms": { "content": "$1", "example": "64" } }
+  },
+  "chipJitter": {
+    "message": "jitter ±$MS$ ms",
+    "placeholders": { "ms": { "content": "$1", "example": "8" } }
+  },
+  "chipRange": {
+    "message": "range $MIN$–$MAX$ ms",
     "placeholders": {
-      "ms": {
-        "content": "$1",
-        "example": "42"
-      }
+      "min": { "content": "$1", "example": "60" },
+      "max": { "content": "$2", "example": "215" }
     }
   },
+  "chipSamples": {
+    "message": "$COUNT$ samples",
+    "placeholders": { "count": { "content": "$1", "example": "3" } }
+  },
+  "chipHttp": {
+    "message": "HTTP $STATUS$",
+    "placeholders": { "status": { "content": "$1", "example": "403" } }
+  },
+  "reasonTimeout": {
+    "message": "No answer in time"
+  },
+  "reasonNetwork": {
+    "message": "Could not connect"
+  },
+
   "toastResult": {
     "message": "Response time: $MS$ ms",
-    "placeholders": {
-      "ms": {
-        "content": "$1",
-        "example": "42"
-      }
-    }
+    "placeholders": { "ms": { "content": "$1", "example": "42" } }
   },
   "toastInvalidUrl": {
     "message": "Enter a valid site address"
   },
   "toastTimeout": {
-    "message": "No answer within $SECONDS$ s",
-    "placeholders": {
-      "seconds": {
-        "content": "$1",
-        "example": "5"
-      }
-    }
+    "message": "The host accepted the connection but sent no answer"
   },
   "toastUnreachable": {
     "message": "Site did not respond"
   },
   "toastBusy": {
     "message": "A check is already running"
+  },
+  "toastNoTab": {
+    "message": "Could not read the active tab"
+  },
+  "toastTabNotPingable": {
+    "message": "This page has no address that can be checked"
+  },
+  "toastPinAdded": {
+    "message": "$HOST$ pinned",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+  "toastPinExists": {
+    "message": "That address is already pinned"
+  },
+  "toastPinLimit": {
+    "message": "Room for $COUNT$ pinned addresses",
+    "placeholders": { "count": { "content": "$1", "example": "6" } }
+  },
+  "toastWatchAdded": {
+    "message": "Now watching $HOST$",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
+  },
+  "toastWatchExists": {
+    "message": "That address is already being watched"
+  },
+  "toastWatchLimit": {
+    "message": "Room for $COUNT$ watched addresses",
+    "placeholders": { "count": { "content": "$1", "example": "10" } }
   },
   "toastHistoryEmpty": {
     "message": "History is already empty"
@@ -93,17 +208,29 @@
   "toastHistoryCleared": {
     "message": "History cleared"
   },
-  "historyEntryTitle": {
-    "message": "$URL$ — HTTP $STATUS$",
+  "toastExported": {
+    "message": "$COUNT$ rows copied as CSV",
+    "placeholders": { "count": { "content": "$1", "example": "12" } }
+  },
+  "toastExportFailed": {
+    "message": "Could not write to the clipboard"
+  },
+
+  "notifyUpTitle": {
+    "message": "Back up"
+  },
+  "notifyDownTitle": {
+    "message": "Not responding"
+  },
+  "notifyUp": {
+    "message": "$HOST$ is responding again — $MS$ ms",
     "placeholders": {
-      "url": {
-        "content": "$1",
-        "example": "https://example.com/"
-      },
-      "status": {
-        "content": "$2",
-        "example": "200"
-      }
+      "host": { "content": "$1", "example": "github.com" },
+      "ms": { "content": "$2", "example": "64" }
     }
+  },
+  "notifyDown": {
+    "message": "$HOST$ stopped responding",
+    "placeholders": { "host": { "content": "$1", "example": "github.com" } }
   }
 }

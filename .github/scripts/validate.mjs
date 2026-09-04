@@ -64,12 +64,34 @@ function checkJs(file) {
   }
 }
 
+/**
+ * A relative import that does not resolve fails silently in a browser: the
+ * module simply never loads. Cheaper to catch it here.
+ */
+function unresolvedImports(file) {
+  const source = readFileSync(file, 'utf8');
+  const base = dirname(file);
+  const specifiers = [
+    ...source.matchAll(/\bfrom\s+['"](\.[^'"]*)['"]/g),
+    ...source.matchAll(/\bimport\s*\(\s*['"](\.[^'"]*)['"]\s*\)/g),
+  ];
+
+  return [...new Set(specifiers.map(([, specifier]) => specifier))].filter(
+    (specifier) => !existsSync(join(base, specifier))
+  );
+}
+
 function runJs() {
   const targets = byExt('.js');
   if (!targets.length) return console.log('No .js files to check.');
   for (const file of targets) {
     try {
-      console.log(`ok  ${toPosix(file)}  (${checkJs(file)})`);
+      const kind = checkJs(file);
+      const missing = unresolvedImports(file);
+      for (const specifier of missing) {
+        fail(file, `imports "${specifier}", which does not resolve to a file`);
+      }
+      if (missing.length === 0) console.log(`ok  ${toPosix(file)}  (${kind})`);
     } catch (error) {
       fail(file, error.stderr ? error.stderr.toString() : error.message);
     }

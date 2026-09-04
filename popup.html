@@ -58,6 +58,25 @@
             <path d="M12 11.2v5.6"/>
             <circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/>
         </symbol>
+        <symbol id="i-window" viewBox="0 0 24 24">
+            <rect x="3" y="4.5" width="18" height="15" rx="2.5"/>
+            <path d="M3 9h18"/>
+            <circle cx="6.6" cy="6.8" r="0.9" fill="currentColor" stroke="none"/>
+        </symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24">
+            <rect x="9" y="9" width="11" height="11" rx="2.2"/>
+            <path d="M15 6.2A2.2 2.2 0 0 0 12.8 4H6.2A2.2 2.2 0 0 0 4 6.2v6.6A2.2 2.2 0 0 0 6.2 15"/>
+        </symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24">
+            <path d="M2.5 12S6.2 5.5 12 5.5 21.5 12 21.5 12 17.8 18.5 12 18.5 2.5 12 2.5 12Z"/>
+            <circle cx="12" cy="12" r="3.2"/>
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14"/>
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18"/>
+        </symbol>
     </svg>
 
     <div class="container">
@@ -66,73 +85,107 @@
             <h1 data-i18n="appName">Quick Ping</h1>
         </div>
 
+        <div class="tabs" role="tablist">
+            <button class="tab is-active" id="tabCheck" data-view="check" role="tab" data-i18n="tabCheck">Check</button>
+            <button class="tab" id="tabWatch" data-view="watch" role="tab">
+                <span data-i18n="tabWatch">Watch</span>
+                <span class="tab-count" id="watchCount" hidden>0</span>
+            </button>
+        </div>
+
         <div class="main-content">
-            <div class="input-section">
-                <div class="input-group">
-                    <input type="text" id="urlInput" data-i18n-placeholder="urlPlaceholder"
-                           autocomplete="off" spellcheck="false" autocapitalize="off">
-                    <button id="pingBtn" class="btn-primary" data-i18n-title="pingButton" data-i18n-aria="pingButton">
-                        <svg class="icon" id="pingBtnIcon"><use href="#i-play"></use></svg>
-                    </button>
+            <!-- Экран проверки -->
+            <section class="view" id="viewCheck" role="tabpanel">
+                <div class="card">
+                    <div class="input-group">
+                        <input type="text" id="urlInput" data-i18n-placeholder="urlPlaceholder"
+                               autocomplete="off" spellcheck="false" autocapitalize="off">
+                        <button id="pingBtn" class="btn-primary" data-i18n-title="pingButton" data-i18n-aria="pingButton">
+                            <svg class="icon" id="pingBtnIcon"><use href="#i-play"></use></svg>
+                        </button>
+                    </div>
+
+                    <div class="input-actions">
+                        <button id="currentTabBtn" class="btn-ghost" data-i18n-title="currentTabHint">
+                            <svg class="icon icon-sm"><use href="#i-window"></use></svg>
+                            <span data-i18n="currentTab">This tab</span>
+                        </button>
+                        <label class="field">
+                            <span data-i18n="samplesLabel">Samples</span>
+                            <select id="samplesSelect" data-i18n-title="samplesHint"></select>
+                        </label>
+                    </div>
+
+                    <div class="quick-buttons" id="pinList"></div>
                 </div>
 
-                <div class="quick-buttons">
-                    <button class="quick-btn" data-url="google.com">
-                        <svg class="icon icon-sm"><use href="#i-globe"></use></svg>
-                        <span>Google</span>
-                    </button>
-                    <button class="quick-btn" data-url="youtube.com">
-                        <svg class="icon icon-sm"><use href="#i-globe"></use></svg>
-                        <span>YouTube</span>
-                    </button>
-                    <button class="quick-btn" data-url="github.com">
-                        <svg class="icon icon-sm"><use href="#i-globe"></use></svg>
-                        <span>GitHub</span>
-                    </button>
-                </div>
-            </div>
+                <div id="currentResult" class="current-result card"></div>
 
-            <div id="currentResult" class="current-result">
-                <div class="result-placeholder">
-                    <svg class="icon icon-xl"><use href="#i-globe"></use></svg>
-                    <p data-i18n="resultPlaceholder">Enter a site address</p>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-icon">
+                            <svg class="icon"><use href="#i-clock"></use></svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-label" data-i18n="statLast">Last</div>
+                            <div id="lastPing" class="stat-value">-</div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-icon">
+                            <svg class="icon"><use href="#i-chart"></use></svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-label" data-i18n="statAverage">Average</div>
+                            <div id="avgPing" class="stat-value">-</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-icon">
-                        <svg class="icon"><use href="#i-clock"></use></svg>
+                <div class="card history-section">
+                    <div class="section-header">
+                        <h3>
+                            <svg class="icon icon-sm"><use href="#i-history"></use></svg>
+                            <span data-i18n="historyTitle">History</span>
+                        </h3>
+                        <div class="section-actions">
+                            <button id="exportBtn" class="btn-icon" data-i18n-title="exportHistory" data-i18n-aria="exportHistory">
+                                <svg class="icon icon-sm"><use href="#i-copy"></use></svg>
+                            </button>
+                            <button id="clearBtn" class="btn-clear" data-i18n-title="clearButton" data-i18n-aria="clearButton">
+                                <svg class="icon icon-sm"><use href="#i-trash"></use></svg>
+                                <span class="btn-clear-label" data-i18n="clearConfirm">Sure?</span>
+                            </button>
+                        </div>
                     </div>
-                    <div class="stat-info">
-                        <div class="stat-label" data-i18n="statLast">Last</div>
-                        <div id="lastPing" class="stat-value">-</div>
-                    </div>
+                    <div id="historyList" class="history-list"></div>
                 </div>
-                <div class="stat">
-                    <div class="stat-icon">
-                        <svg class="icon"><use href="#i-chart"></use></svg>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-label" data-i18n="statAverage">Average</div>
-                        <div id="avgPing" class="stat-value">-</div>
-                    </div>
-                </div>
-            </div>
+            </section>
 
-            <div class="history-section">
-                <div class="section-header">
-                    <h3>
-                        <svg class="icon icon-sm"><use href="#i-history"></use></svg>
-                        <span data-i18n="historyTitle">History</span>
-                    </h3>
-                    <button id="clearBtn" class="btn-clear" data-i18n-title="clearButton" data-i18n-aria="clearButton">
-                        <svg class="icon icon-sm"><use href="#i-trash"></use></svg>
-                        <span class="btn-clear-label" data-i18n="clearConfirm">Sure?</span>
-                    </button>
+            <!-- Экран наблюдения -->
+            <section class="view" id="viewWatch" role="tabpanel" hidden>
+                <div class="card">
+                    <p class="hint" data-i18n="watchHint"></p>
+                    <div class="input-group">
+                        <input type="text" id="watchInput" data-i18n-placeholder="urlPlaceholder"
+                               autocomplete="off" spellcheck="false" autocapitalize="off">
+                        <select id="watchInterval" data-i18n-title="watchIntervalHint"></select>
+                        <button id="watchAddBtn" class="btn-primary" data-i18n-title="watchAdd" data-i18n-aria="watchAdd">
+                            <svg class="icon"><use href="#i-plus"></use></svg>
+                        </button>
+                    </div>
                 </div>
-                <div id="historyList" class="history-list"></div>
-            </div>
+
+                <div class="card history-section">
+                    <div class="section-header">
+                        <h3>
+                            <svg class="icon icon-sm"><use href="#i-eye"></use></svg>
+                            <span data-i18n="watchTitle">Watched</span>
+                        </h3>
+                    </div>
+                    <div id="watchList" class="watch-list"></div>
+                </div>
+            </section>
         </div>
 
         <div class="footer">
@@ -145,6 +198,6 @@
 
     <div id="notifications" class="notifications" role="status" aria-live="polite"></div>
 
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
 </body>
 </html>

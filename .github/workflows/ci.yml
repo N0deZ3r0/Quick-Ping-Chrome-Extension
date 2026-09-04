@@ -44,3 +44,6 @@ jobs:
 
       - name: Translations
         run: node .github/scripts/validate.mjs i18n
+
+      - name: Background watch logic
+        run: npm test

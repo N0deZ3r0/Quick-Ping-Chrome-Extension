@@ -1,336 +1,453 @@
-'use strict';
+import { element, icon, setIcon, setClass } from './lib/dom.js';
+import { t, applyTranslations } from './lib/i18n.js';
+import { parseTarget } from './lib/target.js';
+import { measure, SAMPLE_CHOICES } from './lib/ping.js';
+import {
+    readState,
+    writeState,
+    HISTORY_LIMIT,
+    PIN_LIMIT,
+    WATCH_LIMIT,
+    INTERVAL_CHOICES,
+} from './lib/store.js';
 
-/**
- * Quick Ping — измеряет время до первого байта HTTP-ответа.
- *
- * Это не ICMP-пинг: расширение браузера не умеет слать ICMP. Мы делаем один
- * GET и засекаем, сколько прошло до прихода заголовков ответа, после чего
- * сбрасываем тело, не скачивая его. В сумме это DNS + TCP + TLS + ответ
- * сервера — то есть ровно та задержка, которую пользователь и ощущает.
- */
-
-const PING_TIMEOUT_MS = 5000;
-const HISTORY_LIMIT = 10;
 const GOOD_THRESHOLD_MS = 100;
 const MEDIUM_THRESHOLD_MS = 300;
 const NOTIFICATION_TTL_MS = 3000;
 const NOTIFICATION_LIMIT = 3;
 const CLEAR_ARMED_MS = 3500;
-const LABEL_MAX_LENGTH = 200;
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+const ui = {
+    urlInput: document.getElementById('urlInput'),
+    pingBtn: document.getElementById('pingBtn'),
+    pingBtnIcon: document.getElementById('pingBtnIcon'),
+    currentTabBtn: document.getElementById('currentTabBtn'),
+    samplesSelect: document.getElementById('samplesSelect'),
+    pinList: document.getElementById('pinList'),
+    currentResult: document.getElementById('currentResult'),
+    lastPing: document.getElementById('lastPing'),
+    avgPing: document.getElementById('avgPing'),
+    historyList: document.getElementById('historyList'),
+    exportBtn: document.getElementById('exportBtn'),
+    clearBtn: document.getElementById('clearBtn'),
+    watchInput: document.getElementById('watchInput'),
+    watchInterval: document.getElementById('watchInterval'),
+    watchAddBtn: document.getElementById('watchAddBtn'),
+    watchList: document.getElementById('watchList'),
+    watchCount: document.getElementById('watchCount'),
+    statusIcon: document.getElementById('statusIcon'),
+    statusText: document.getElementById('statusText'),
+    notifications: document.getElementById('notifications'),
+    tabs: Array.from(document.querySelectorAll('.tab')),
+    views: {
+        check: document.getElementById('viewCheck'),
+        watch: document.getElementById('viewWatch'),
+    },
+};
 
-document.addEventListener('DOMContentLoaded', () => {
-    const urlInput = document.getElementById('urlInput');
-    const pingBtn = document.getElementById('pingBtn');
-    const pingBtnIcon = document.getElementById('pingBtnIcon');
-    const clearBtn = document.getElementById('clearBtn');
-    const currentResult = document.getElementById('currentResult');
-    const lastPing = document.getElementById('lastPing');
-    const avgPing = document.getElementById('avgPing');
-    const historyList = document.getElementById('historyList');
-    const statusIcon = document.getElementById('statusIcon');
-    const statusText = document.getElementById('statusText');
-    const notifications = document.getElementById('notifications');
-    const quickButtons = Array.from(document.querySelectorAll('.quick-btn'));
+const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
 
-    const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+let state = { history: [], pins: [], watches: [], settings: { samples: 3 } };
+let isPinging = false;
+let clearArmedTimer = null;
 
-    let pingHistory = [];
-    let isPinging = false;
-    let clearArmedTimer = null;
+init();
 
+async function init() {
     applyTranslations();
-    init();
+    buildSelects();
+    bindEvents();
 
-    pingBtn.addEventListener('click', () => startPing(urlInput.value));
-    urlInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' && !event.isComposing) startPing(urlInput.value);
+    state = await readState();
+    ui.samplesSelect.value = String(state.settings.samples);
+    renderAll();
+    setStatus(t('statusReady'), 'good');
+    ui.urlInput.focus();
+}
+
+function buildSelects() {
+    ui.samplesSelect.replaceChildren(
+        ...SAMPLE_CHOICES.map((count) => element('option', { value: String(count), text: String(count) }))
+    );
+
+    ui.watchInterval.replaceChildren(
+        ...INTERVAL_CHOICES.map((minutes) =>
+            element('option', { value: String(minutes), text: t('intervalMinutes', minutes) })
+        )
+    );
+    ui.watchInterval.value = String(INTERVAL_CHOICES[1]);
+}
+
+function bindEvents() {
+    ui.pingBtn.addEventListener('click', () => startPing(ui.urlInput.value));
+    ui.urlInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.isComposing) startPing(ui.urlInput.value);
     });
-    clearBtn.addEventListener('click', handleClearClick);
-    quickButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-            urlInput.value = button.dataset.url;
-            startPing(button.dataset.url);
+
+    ui.currentTabBtn.addEventListener('click', checkCurrentTab);
+    ui.samplesSelect.addEventListener('change', async () => {
+        state.settings = { samples: Number(ui.samplesSelect.value) };
+        await writeState({ settings: state.settings });
+    });
+
+    ui.exportBtn.addEventListener('click', exportHistory);
+    ui.clearBtn.addEventListener('click', handleClearClick);
+
+    ui.watchAddBtn.addEventListener('click', () => addWatch(ui.watchInput.value));
+    ui.watchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.isComposing) addWatch(ui.watchInput.value);
+    });
+
+    for (const tab of ui.tabs) {
+        tab.addEventListener('click', () => switchView(tab.dataset.view));
+    }
+
+    // Фоновые проверки пишут в хранилище — держим открытый попап в курсе.
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local' || !changes.watches) return;
+        readState().then((fresh) => {
+            state.watches = fresh.watches;
+            renderWatches();
         });
     });
+}
 
-    async function init() {
-        await loadData();
-        renderAll();
-        setStatus(t('statusReady'), 'good');
-        urlInput.focus();
+function switchView(name) {
+    for (const tab of ui.tabs) tab.classList.toggle('is-active', tab.dataset.view === name);
+    for (const [key, node] of Object.entries(ui.views)) node.hidden = key !== name;
+    if (name === 'watch') ui.watchInput.focus();
+    else ui.urlInput.focus();
+}
+
+/* ---------------------------------------------------------------------- *
+ * Проверка
+ * ---------------------------------------------------------------------- */
+
+async function startPing(rawUrl) {
+    if (isPinging) {
+        notify(t('toastBusy'), 'info');
+        return;
     }
 
-    /* ------------------------------------------------------------------ *
-     * Локализация
-     * ------------------------------------------------------------------ */
-
-    function t(key, ...substitutions) {
-        return chrome.i18n.getMessage(key, substitutions.map(String)) || key;
+    const target = parseTarget(rawUrl);
+    if (!target) {
+        notify(t('toastInvalidUrl'), 'error');
+        ui.urlInput.focus();
+        ui.urlInput.select();
+        return;
     }
 
-    function applyTranslations() {
-        document.documentElement.lang = chrome.i18n.getUILanguage();
+    setBusy(true);
+    setStatus(t('statusChecking'), 'loading');
 
-        const targets = [
-            ['data-i18n', 'i18n', null],
-            ['data-i18n-title', 'i18nTitle', 'title'],
-            ['data-i18n-placeholder', 'i18nPlaceholder', 'placeholder'],
-            ['data-i18n-aria', 'i18nAria', 'aria-label'],
-        ];
+    try {
+        const outcome = await measure(target.href, { samples: state.settings.samples });
+        const record = { ...outcome, label: target.label, href: target.href };
 
-        for (const [selector, datasetKey, attribute] of targets) {
-            for (const node of document.querySelectorAll(`[${selector}]`)) {
-                const message = t(node.dataset[datasetKey]);
-                if (attribute) node.setAttribute(attribute, message);
-                else node.textContent = message;
-            }
-        }
-    }
+        state.history = [record, ...state.history].slice(0, HISTORY_LIMIT);
+        await writeState({ history: state.history });
 
-    /* ------------------------------------------------------------------ *
-     * Разбор адреса
-     * ------------------------------------------------------------------ */
-
-    const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
-    const TLD_RE = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i;
-    // Октеты уже проверил разбор URL — здесь достаточно отличить IP от домена.
-    const IPV4_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-
-    function isDomainName(hostname) {
-        if (hostname.length > 253) return false;
-        const labels = hostname.split('.');
-        if (labels.length < 2) return false;
-        if (!labels.every((label) => LABEL_RE.test(label))) return false;
-        return TLD_RE.test(labels[labels.length - 1]);
-    }
-
-    /** Приводит ввод к цели проверки; null — если адрес непригоден. */
-    function parseTarget(raw) {
-        const input = String(raw ?? '').trim();
-        if (!input || /\s/.test(input)) return null;
-
-        const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
-
-        let url;
-        try {
-            url = new URL(candidate);
-        } catch {
-            return null;
-        }
-
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-
-        const hostname = url.hostname;
-        const isIpv6 = hostname.startsWith('[') && hostname.endsWith(']');
-        const isIpv4 = IPV4_RE.test(hostname);
-        if (!isIpv6 && !isIpv4 && hostname !== 'localhost' && !isDomainName(hostname)) return null;
-
-        url.hash = '';
-        url.username = '';
-        url.password = '';
-
-        const path = url.pathname === '/' ? '' : url.pathname;
-        const label = `${url.host}${path}${url.search}`.slice(0, LABEL_MAX_LENGTH);
-
-        return { href: url.href, label };
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Измерение
-     * ------------------------------------------------------------------ */
-
-    async function measure(href) {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-        const startedAt = performance.now();
-
-        try {
-            const response = await fetch(href, {
-                method: 'GET',
-                cache: 'no-store',
-                redirect: 'follow',
-                credentials: 'omit',
-                referrerPolicy: 'no-referrer',
-                signal: controller.signal,
-            });
-
-            const ms = Math.round(performance.now() - startedAt);
-
-            // Заголовки получены — тело не нужно, освобождаем соединение.
-            response.body?.cancel().catch(() => {});
-
-            return { ok: true, ms, status: response.status };
-        } catch {
-            return { ok: false, timedOut: controller.signal.aborted };
-        } finally {
-            clearTimeout(timer);
-        }
-    }
-
-    async function startPing(rawUrl) {
-        if (isPinging) {
-            notify(t('toastBusy'), 'info');
-            return;
-        }
-
-        const target = parseTarget(rawUrl);
-        if (!target) {
-            notify(t('toastInvalidUrl'), 'error');
-            urlInput.focus();
-            urlInput.select();
-            return;
-        }
-
-        setBusy(true);
-        setStatus(t('statusChecking'), 'loading');
-
-        try {
-            const outcome = await measure(target.href);
-
-            addRecord({
-                label: target.label,
-                href: target.href,
-                ms: outcome.ok ? outcome.ms : null,
-                status: outcome.ok ? outcome.status : null,
-                ok: outcome.ok,
-                at: Date.now(),
-            });
-            renderAll();
-
-            if (outcome.ok) {
-                notify(t('toastResult', outcome.ms), 'success');
-                setStatus(t('milliseconds', outcome.ms), toneFor(outcome.ms));
-            } else {
-                const seconds = Math.round(PING_TIMEOUT_MS / 1000);
-                notify(outcome.timedOut ? t('toastTimeout', seconds) : t('toastUnreachable'), 'error');
-                setStatus(t('statusError'), 'bad');
-            }
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Состояние
-     * ------------------------------------------------------------------ */
-
-    function toneFor(ms) {
-        if (!Number.isFinite(ms)) return 'bad';
-        if (ms < GOOD_THRESHOLD_MS) return 'good';
-        if (ms < MEDIUM_THRESHOLD_MS) return 'medium';
-        return 'bad';
-    }
-
-    function addRecord(record) {
-        pingHistory.unshift(record);
-        pingHistory = pingHistory.slice(0, HISTORY_LIMIT);
-        saveData();
-    }
-
-    function isValidRecord(value) {
-        return Boolean(
-            value &&
-            typeof value === 'object' &&
-            typeof value.label === 'string' &&
-            typeof value.href === 'string' &&
-            typeof value.ok === 'boolean' &&
-            Number.isFinite(value.at) &&
-            (value.ms === null || Number.isFinite(value.ms)) &&
-            (value.status === null || Number.isFinite(value.status))
-        );
-    }
-
-    async function loadData() {
-        try {
-            const stored = await chrome.storage.local.get({ pingHistory: [] });
-            pingHistory = Array.isArray(stored.pingHistory)
-                ? stored.pingHistory.filter(isValidRecord).slice(0, HISTORY_LIMIT)
-                : [];
-        } catch (error) {
-            console.warn('Quick Ping: не удалось прочитать историю', error);
-            pingHistory = [];
-        }
-    }
-
-    function saveData() {
-        chrome.storage.local.set({ pingHistory }).catch((error) => {
-            console.warn('Quick Ping: не удалось сохранить историю', error);
-        });
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Отрисовка
-     * ------------------------------------------------------------------ */
-
-    function renderAll() {
-        renderCurrentResult();
+        renderResult();
         renderStats();
         renderHistory();
+
+        if (outcome.ok) {
+            notify(t('toastResult', outcome.ms), outcome.degraded ? 'info' : 'success');
+            setStatus(t('milliseconds', outcome.ms), toneFor(outcome.ms));
+        } else {
+            notify(outcome.reason === 'timeout' ? t('toastTimeout') : t('toastUnreachable'), 'error');
+            setStatus(t('statusError'), 'bad');
+        }
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function checkCurrentTab() {
+    let tab;
+    try {
+        [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    } catch {
+        notify(t('toastNoTab'), 'error');
+        return;
     }
 
-    function renderCurrentResult() {
-        currentResult.replaceChildren();
+    const target = parseTarget(tab?.url ?? '');
+    if (!target) {
+        // chrome://, about:, страницы расширений — пинговать там нечего.
+        notify(t('toastTabNotPingable'), 'error');
+        return;
+    }
 
-        const latest = pingHistory[0];
-        if (!latest) {
-            currentResult.append(
-                element('div', { class: 'result-placeholder' },
-                    icon('i-globe', 'icon icon-xl'),
-                    element('p', { text: t('resultPlaceholder') })
-                )
-            );
-            return;
-        }
+    ui.urlInput.value = target.label;
+    startPing(target.href);
+}
 
-        const value = latest.ok
-            ? element('div', { class: `ping-value ping-${toneFor(latest.ms)}`, text: t('milliseconds', latest.ms) })
-            : element('div', { class: 'ping-value ping-error', text: t('errorLabel') });
+/* ---------------------------------------------------------------------- *
+ * Закреплённые адреса
+ * ---------------------------------------------------------------------- */
 
-        currentResult.append(
-            element('div', { class: 'ping-result fade-in' },
-                value,
-                element('div', { class: 'ping-url', title: latest.href, text: latest.label })
-            )
+async function addPin(raw) {
+    const target = parseTarget(raw);
+    if (!target) {
+        notify(t('toastInvalidUrl'), 'error');
+        return;
+    }
+    if (state.pins.includes(target.label)) {
+        notify(t('toastPinExists'), 'info');
+        return;
+    }
+    if (state.pins.length >= PIN_LIMIT) {
+        notify(t('toastPinLimit', PIN_LIMIT), 'error');
+        return;
+    }
+
+    state.pins = [...state.pins, target.label];
+    await writeState({ pins: state.pins });
+    renderPins();
+    notify(t('toastPinAdded', target.label), 'success');
+}
+
+async function removePin(label) {
+    state.pins = state.pins.filter((pin) => pin !== label);
+    await writeState({ pins: state.pins });
+    renderPins();
+}
+
+function renderPins() {
+    const chips = state.pins.map((pin) =>
+        element('div', { class: 'quick-btn' },
+            element('button', {
+                class: 'quick-btn-main',
+                title: pin,
+                text: pin,
+                onClick: () => {
+                    ui.urlInput.value = pin;
+                    startPing(pin);
+                },
+            }),
+            element('button', {
+                class: 'quick-btn-remove',
+                title: t('unpin', pin),
+                'aria-label': t('unpin', pin),
+                onClick: () => removePin(pin),
+            }, icon('i-close', 'icon icon-xs'))
+        )
+    );
+
+    if (state.pins.length < PIN_LIMIT) {
+        chips.push(
+            element('button', {
+                class: 'quick-btn quick-btn-add',
+                title: t('pinCurrent'),
+                'aria-label': t('pinCurrent'),
+                onClick: () => addPin(ui.urlInput.value),
+            }, icon('i-plus', 'icon icon-sm'))
         );
     }
 
-    function renderStats() {
-        const latest = pingHistory[0];
-        if (!latest) {
-            setStatValue(lastPing, '-', null);
-        } else if (latest.ok) {
-            setStatValue(lastPing, t('milliseconds', latest.ms), toneFor(latest.ms));
-        } else {
-            setStatValue(lastPing, t('errorLabel'), 'bad');
-        }
+    ui.pinList.replaceChildren(...chips);
+}
 
-        const successful = pingHistory.filter((record) => record.ok);
-        if (successful.length === 0) {
-            setStatValue(avgPing, '-', null);
-            return;
-        }
+/* ---------------------------------------------------------------------- *
+ * Наблюдение
+ * ---------------------------------------------------------------------- */
 
-        const total = successful.reduce((sum, record) => sum + record.ms, 0);
-        const average = Math.round(total / successful.length);
-        setStatValue(avgPing, t('milliseconds', average), toneFor(average));
+async function addWatch(raw) {
+    const target = parseTarget(raw);
+    if (!target) {
+        notify(t('toastInvalidUrl'), 'error');
+        ui.watchInput.focus();
+        ui.watchInput.select();
+        return;
+    }
+    if (state.watches.some((watch) => watch.href === target.href)) {
+        notify(t('toastWatchExists'), 'info');
+        return;
+    }
+    if (state.watches.length >= WATCH_LIMIT) {
+        notify(t('toastWatchLimit', WATCH_LIMIT), 'error');
+        return;
     }
 
-    function setStatValue(node, text, tone) {
-        node.textContent = text;
-        node.className = tone ? `stat-value ping-${tone}` : 'stat-value';
+    const watch = {
+        href: target.href,
+        label: target.label,
+        minutes: Number(ui.watchInterval.value),
+        state: 'unknown',
+        ms: null,
+        status: null,
+        reason: null,
+        checkedAt: null,
+    };
+
+    state.watches = [...state.watches, watch];
+    await writeState({ watches: state.watches });
+    ui.watchInput.value = '';
+    renderWatches();
+    notify(t('toastWatchAdded', target.label), 'success');
+
+    // Первая проверка сразу: она задаёт точку отсчёта, от которой service
+    // worker потом заметит смену состояния.
+    const outcome = await measure(target.href, { samples: 1 });
+    const index = state.watches.findIndex((item) => item.href === target.href);
+    if (index === -1) return;
+
+    state.watches[index] = {
+        ...state.watches[index],
+        state: outcome.ok ? 'up' : 'down',
+        ms: outcome.ok ? outcome.ms : null,
+        status: outcome.ok ? outcome.status : null,
+        reason: outcome.ok ? null : outcome.reason,
+        checkedAt: Date.now(),
+    };
+    await writeState({ watches: state.watches });
+    renderWatches();
+}
+
+async function removeWatch(href) {
+    state.watches = state.watches.filter((watch) => watch.href !== href);
+    await writeState({ watches: state.watches });
+    renderWatches();
+}
+
+function renderWatches() {
+    ui.watchCount.textContent = String(state.watches.length);
+    ui.watchCount.hidden = state.watches.length === 0;
+
+    if (state.watches.length === 0) {
+        ui.watchList.replaceChildren(element('div', { class: 'history-empty', text: t('watchEmpty') }));
+        return;
     }
 
-    function renderHistory() {
-        historyList.replaceChildren();
+    ui.watchList.replaceChildren(
+        ...state.watches.map((watch) => {
+            const tone = watch.state === 'up' ? 'good' : watch.state === 'down' ? 'bad' : 'idle';
+            const checked = Number.isFinite(watch.checkedAt)
+                ? t('watchChecked', timeFormatter.format(new Date(watch.checkedAt)))
+                : t('watchPending');
 
-        if (pingHistory.length === 0) {
-            historyList.append(element('div', { class: 'history-empty', text: t('historyEmpty') }));
-            return;
+            return element('div', { class: 'watch-item' },
+                icon('i-dot', `icon icon-xs watch-dot watch-dot-${tone}`),
+                element('div', { class: 'watch-info' },
+                    element('div', { class: 'watch-url', title: watch.href, text: watch.label }),
+                    element('div', { class: 'watch-meta', text: `${t('intervalMinutes', watch.minutes)} · ${checked}` })
+                ),
+                element('span', {
+                    class: `watch-state ping-${tone === 'idle' ? 'idle' : tone}`,
+                    text: watch.state === 'up'
+                        ? t('milliseconds', watch.ms ?? 0)
+                        : watch.state === 'down' ? t('errorLabel') : '—',
+                }),
+                element('button', {
+                    class: 'btn-icon',
+                    title: t('watchRemove', watch.label),
+                    'aria-label': t('watchRemove', watch.label),
+                    onClick: () => removeWatch(watch.href),
+                }, icon('i-close', 'icon icon-sm'))
+            );
+        })
+    );
+}
+
+/* ---------------------------------------------------------------------- *
+ * Отрисовка результата и истории
+ * ---------------------------------------------------------------------- */
+
+function toneFor(ms) {
+    if (!Number.isFinite(ms)) return 'bad';
+    if (ms < GOOD_THRESHOLD_MS) return 'good';
+    if (ms < MEDIUM_THRESHOLD_MS) return 'medium';
+    return 'bad';
+}
+
+function renderAll() {
+    renderPins();
+    renderResult();
+    renderStats();
+    renderHistory();
+    renderWatches();
+}
+
+function renderResult() {
+    const latest = state.history[0];
+
+    if (!latest) {
+        ui.currentResult.replaceChildren(
+            element('div', { class: 'result-placeholder' },
+                icon('i-globe', 'icon icon-xl'),
+                element('p', { text: t('resultPlaceholder') })
+            )
+        );
+        return;
+    }
+
+    const chips = [];
+
+    if (latest.ok) {
+        // Холодный замер несёт на себе рукопожатие, тёплый — нет. Показываем
+        // оба, иначе непонятно, почему повторная проверка «быстрее».
+        if (latest.warm !== null && latest.warm !== undefined) {
+            chips.push(makeChip(t('chipCold', latest.cold), 'neutral'));
         }
+        if (Number.isFinite(latest.jitter)) {
+            chips.push(makeChip(t('chipJitter', latest.jitter), 'neutral'));
+        }
+        if (latest.degraded) {
+            chips.push(makeChip(t('chipHttp', latest.status), 'warn'));
+        }
+    } else {
+        chips.push(makeChip(latest.reason === 'timeout' ? t('reasonTimeout') : t('reasonNetwork'), 'warn'));
+    }
 
-        for (const record of pingHistory) {
+    const value = latest.ok
+        ? element('div', { class: `ping-value ping-${toneFor(latest.ms)}`, text: t('milliseconds', latest.ms) })
+        : element('div', { class: 'ping-value ping-error', text: t('errorLabel') });
+
+    ui.currentResult.replaceChildren(
+        element('div', { class: 'ping-result fade-in' },
+            value,
+            element('div', { class: 'ping-url', title: latest.href, text: latest.label }),
+            chips.length > 0 ? element('div', { class: 'chips' }, ...chips) : null
+        )
+    );
+}
+
+function makeChip(text, kind) {
+    return element('span', { class: `chip chip-${kind}`, text });
+}
+
+function renderStats() {
+    const latest = state.history[0];
+
+    if (!latest) setStatValue(ui.lastPing, '-', null);
+    else if (latest.ok) setStatValue(ui.lastPing, t('milliseconds', latest.ms), toneFor(latest.ms));
+    else setStatValue(ui.lastPing, t('errorLabel'), 'bad');
+
+    const successful = state.history.filter((record) => record.ok);
+    if (successful.length === 0) {
+        setStatValue(ui.avgPing, '-', null);
+        return;
+    }
+
+    const total = successful.reduce((sum, record) => sum + record.ms, 0);
+    const average = Math.round(total / successful.length);
+    setStatValue(ui.avgPing, t('milliseconds', average), toneFor(average));
+}
+
+function setStatValue(node, text, tone) {
+    node.textContent = text;
+    node.className = tone ? `stat-value ping-${tone}` : 'stat-value';
+}
+
+function renderHistory() {
+    if (state.history.length === 0) {
+        ui.historyList.replaceChildren(element('div', { class: 'history-empty', text: t('historyEmpty') }));
+        return;
+    }
+
+    ui.historyList.replaceChildren(
+        ...state.history.map((record) => {
             const badge = record.ok
                 ? element('span', {
                     class: `history-ping ping-${toneFor(record.ms)}`,
@@ -338,139 +455,163 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 : element('span', { class: 'history-ping ping-bad', text: t('errorLabel') });
 
-            const title = record.ok
-                ? t('historyEntryTitle', record.href, record.status)
-                : record.href;
-
-            historyList.append(
-                element('div', { class: 'history-item' },
-                    element('span', { class: 'history-url', title, text: record.label }),
-                    element('div', { class: 'history-meta' },
-                        element('span', {
-                            class: 'history-time',
-                            text: timeFormatter.format(new Date(record.at)),
-                        }),
-                        badge
-                    )
+            return element('div', { class: 'history-item' },
+                element('span', { class: 'history-url', title: describe(record), text: record.label }),
+                element('div', { class: 'history-meta' },
+                    record.ok && record.degraded
+                        ? element('span', { class: 'history-flag', text: String(record.status) })
+                        : null,
+                    element('span', {
+                        class: 'history-time',
+                        text: timeFormatter.format(new Date(record.at)),
+                    }),
+                    badge
                 )
             );
-        }
+        })
+    );
+}
+
+/** Полная расшифровка записи — она же подсказка при наведении. */
+function describe(record) {
+    if (!record.ok) {
+        const reason = record.reason === 'timeout' ? t('reasonTimeout') : t('reasonNetwork');
+        return `${record.href}\n${reason}`;
     }
 
-    /* ------------------------------------------------------------------ *
-     * Очистка истории — без confirm(), который умеет закрывать попап
-     * ------------------------------------------------------------------ */
+    const parts = [`HTTP ${record.status}`, t('chipSamples', record.samples), t('chipCold', record.cold)];
+    if (record.warm !== null && record.warm !== undefined) parts.push(t('chipWarm', record.warm));
+    if (Number.isFinite(record.jitter)) parts.push(t('chipJitter', record.jitter));
+    if (Number.isFinite(record.min) && Number.isFinite(record.max)) {
+        parts.push(t('chipRange', record.min, record.max));
+    }
+    return `${record.href}\n${parts.join(' · ')}`;
+}
 
-    function handleClearClick() {
-        if (pingHistory.length === 0) {
-            notify(t('toastHistoryEmpty'), 'info');
-            return;
-        }
+/* ---------------------------------------------------------------------- *
+ * Экспорт и очистка
+ * ---------------------------------------------------------------------- */
 
-        if (!clearBtn.classList.contains('is-armed')) {
-            armClearButton();
-            notify(t('toastConfirmClear'), 'info');
-            return;
-        }
+const CSV_COLUMNS = ['time', 'label', 'url', 'ok', 'ms', 'cold', 'warm', 'jitter', 'min', 'max', 'samples', 'status', 'reason'];
 
-        disarmClearButton();
-        pingHistory = [];
-        saveData();
-        renderAll();
-        setStatus(t('statusReady'), 'good');
-        notify(t('toastHistoryCleared'), 'success');
+function toCsvCell(value) {
+    if (value === null || value === undefined) return '';
+    const text = String(value);
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+async function exportHistory() {
+    if (state.history.length === 0) {
+        notify(t('toastHistoryEmpty'), 'info');
+        return;
     }
 
-    function armClearButton() {
-        clearBtn.classList.add('is-armed');
-        clearTimeout(clearArmedTimer);
-        clearArmedTimer = setTimeout(disarmClearButton, CLEAR_ARMED_MS);
+    const rows = state.history.map((record) => [
+        new Date(record.at).toISOString(),
+        record.label,
+        record.href,
+        record.ok,
+        record.ms ?? '',
+        record.cold ?? '',
+        record.warm ?? '',
+        record.jitter ?? '',
+        record.min ?? '',
+        record.max ?? '',
+        record.samples ?? '',
+        record.status ?? '',
+        record.reason ?? '',
+    ]);
+
+    const csv = [CSV_COLUMNS, ...rows].map((row) => row.map(toCsvCell).join(',')).join('\n');
+
+    try {
+        await navigator.clipboard.writeText(csv);
+        notify(t('toastExported', state.history.length), 'success');
+    } catch {
+        notify(t('toastExportFailed'), 'error');
+    }
+}
+
+async function handleClearClick() {
+    if (state.history.length === 0) {
+        notify(t('toastHistoryEmpty'), 'info');
+        return;
     }
 
-    function disarmClearButton() {
-        clearTimeout(clearArmedTimer);
-        clearArmedTimer = null;
-        clearBtn.classList.remove('is-armed');
+    if (!ui.clearBtn.classList.contains('is-armed')) {
+        armClearButton();
+        notify(t('toastConfirmClear'), 'info');
+        return;
     }
 
-    /* ------------------------------------------------------------------ *
-     * UI
-     * ------------------------------------------------------------------ */
+    disarmClearButton();
+    state.history = [];
+    await writeState({ history: state.history });
+    renderResult();
+    renderStats();
+    renderHistory();
+    setStatus(t('statusReady'), 'good');
+    notify(t('toastHistoryCleared'), 'success');
+}
 
-    function setBusy(busy) {
-        isPinging = busy;
-        pingBtn.disabled = busy;
-        urlInput.disabled = busy;
-        quickButtons.forEach((button) => { button.disabled = busy; });
+function armClearButton() {
+    ui.clearBtn.classList.add('is-armed');
+    clearTimeout(clearArmedTimer);
+    clearArmedTimer = setTimeout(disarmClearButton, CLEAR_ARMED_MS);
+}
 
-        setIcon(pingBtnIcon, busy ? 'i-spinner' : 'i-play');
-        pingBtnIcon.classList.toggle('spin', busy);
+function disarmClearButton() {
+    clearTimeout(clearArmedTimer);
+    clearArmedTimer = null;
+    ui.clearBtn.classList.remove('is-armed');
+}
 
-        if (!busy) {
-            pingBtn.classList.add('pulse');
-            setTimeout(() => pingBtn.classList.remove('pulse'), 300);
-            urlInput.focus();
-        }
+/* ---------------------------------------------------------------------- *
+ * Состояние интерфейса
+ * ---------------------------------------------------------------------- */
+
+function setBusy(busy) {
+    isPinging = busy;
+    ui.pingBtn.disabled = busy;
+    ui.urlInput.disabled = busy;
+    ui.currentTabBtn.disabled = busy;
+    ui.samplesSelect.disabled = busy;
+    for (const button of ui.pinList.querySelectorAll('button')) button.disabled = busy;
+
+    setIcon(ui.pingBtnIcon, busy ? 'i-spinner' : 'i-play');
+    ui.pingBtnIcon.classList.toggle('spin', busy);
+
+    if (!busy) {
+        ui.pingBtn.classList.add('pulse');
+        setTimeout(() => ui.pingBtn.classList.remove('pulse'), 300);
+        ui.urlInput.focus();
+    }
+}
+
+function setStatus(message, tone) {
+    ui.statusText.textContent = message;
+    setClass(ui.statusIcon, `icon icon-xs status-${tone}`);
+    setIcon(ui.statusIcon, tone === 'loading' ? 'i-spinner' : 'i-dot');
+    ui.statusIcon.classList.toggle('spin', tone === 'loading');
+}
+
+const NOTIFICATION_ICONS = { success: 'i-check', error: 'i-alert', info: 'i-info' };
+
+function notify(message, type) {
+    while (ui.notifications.childElementCount >= NOTIFICATION_LIMIT) {
+        ui.notifications.firstElementChild.remove();
     }
 
-    function setStatus(message, tone) {
-        statusText.textContent = message;
-        // У SVGElement className доступен только на чтение — только setAttribute.
-        statusIcon.setAttribute('class', `icon icon-xs status-${tone}`);
-        setIcon(statusIcon, tone === 'loading' ? 'i-spinner' : 'i-dot');
-        statusIcon.classList.toggle('spin', tone === 'loading');
-    }
+    const node = element('div', { class: `notification notification-${type}` },
+        icon(NOTIFICATION_ICONS[type] ?? NOTIFICATION_ICONS.info, 'icon icon-sm'),
+        element('span', { text: message })
+    );
 
-    const NOTIFICATION_ICONS = { success: 'i-check', error: 'i-alert', info: 'i-info' };
+    ui.notifications.append(node);
 
-    function notify(message, type) {
-        while (notifications.childElementCount >= NOTIFICATION_LIMIT) {
-            notifications.firstElementChild.remove();
-        }
-
-        const node = element('div', { class: `notification notification-${type}` },
-            icon(NOTIFICATION_ICONS[type] ?? NOTIFICATION_ICONS.info, 'icon icon-sm'),
-            element('span', { text: message })
-        );
-
-        notifications.append(node);
-
-        setTimeout(() => {
-            node.classList.add('is-leaving');
-            node.addEventListener('animationend', () => node.remove(), { once: true });
-            setTimeout(() => node.remove(), 500);
-        }, NOTIFICATION_TTL_MS);
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Помощники DOM. Никакого innerHTML: сюда приходит пользовательский
-     * ввод, и склейка разметки строкой уже давала XSS через title="...".
-     * ------------------------------------------------------------------ */
-
-    function element(tag, attributes = {}, ...children) {
-        const node = document.createElement(tag);
-
-        for (const [name, value] of Object.entries(attributes)) {
-            if (value === undefined || value === null) continue;
-            if (name === 'text') node.textContent = value;
-            else if (name === 'class') node.className = value;
-            else node.setAttribute(name, value);
-        }
-
-        node.append(...children.filter(Boolean));
-        return node;
-    }
-
-    function icon(name, className = 'icon') {
-        const svg = document.createElementNS(SVG_NS, 'svg');
-        svg.setAttribute('class', className);
-        const use = document.createElementNS(SVG_NS, 'use');
-        use.setAttribute('href', `#${name}`);
-        svg.append(use);
-        return svg;
-    }
-
-    function setIcon(svg, name) {
-        svg.querySelector('use')?.setAttribute('href', `#${name}`);
-    }
-});
+    setTimeout(() => {
+        node.classList.add('is-leaving');
+        node.addEventListener('animationend', () => node.remove(), { once: true });
+        setTimeout(() => node.remove(), 500);
+    }, NOTIFICATION_TTL_MS);
+}
