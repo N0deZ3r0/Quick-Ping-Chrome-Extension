@@ -1,79 +1,85 @@
-📥 Установка Quick Ping
-⚡ Быстрая установка (4 шага)
-1. 📂 Скачайте файлы
-Нажмите "Releases" → "Download rar"
+<div align="center">
 
-Распакуйте архив в любую папку
+<img src="icons/icon128.png" width="88" alt="Quick Ping">
 
-2. 🔧 Откройте Chrome расширения
-text
-chrome://extensions/
-Включите "Режим разработчика" (правый верх)
+# Quick Ping ⚡
 
-3. 📦 Установите расширение
-Нажмите "Загрузить распакованное расширение"
+**Check any site's response time from the Chrome toolbar. Type an address, get milliseconds.**
 
-Выберите папку с файлами
+[![CI](https://github.com/N0deZ3r0/Quick-Ping-Chrome-Extension/actions/workflows/ci.yml/badge.svg)](https://github.com/N0deZ3r0/Quick-Ping-Chrome-Extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/N0deZ3r0/Quick-Ping-Chrome-Extension?label=release)](https://github.com/N0deZ3r0/Quick-Ping-Chrome-Extension/releases/latest)
+[![License](https://img.shields.io/github/license/N0deZ3r0/Quick-Ping-Chrome-Extension?color=blue)](LICENSE)
+![Manifest V3](https://img.shields.io/badge/manifest-v3-4285F4?logo=googlechrome&logoColor=white)
 
-4. ✅ Активируйте
-Нажмите на "булавку" 📌 рядом с Quick Ping
+**English** · [Русский](README.ru.md)
 
-Готово!
+</div>
 
-📁 Нужные файлы
-text
-manifest.json    # обязательно
-popup.html      # обязательно  
-popup.css       # обязательно
-popup.js        # обязательно
-icons/          # папка с иконками
-🚨 Если Chrome ругается
-Это нормально! Просто нажмите:
+---
 
-"Подробнее" под предупреждением
+## What it does
 
-"Все равно установить"
+A small extension for checking how fast any site responds. Enter an address, get
+the latency in milliseconds. No account, no configuration, no telemetry.
 
-Расширение работает
+| | |
+|---|---|
+| **Fast** | A result in two to three seconds |
+| **Simple** | Minimum of buttons, maximum of use |
+| **Readable** | Colour-coded by latency quality |
+| **Honest** | Shows `ERROR` for unreachable sites instead of a made-up number |
+| **Practical** | Keeps a history of your checks |
 
-🔄 Обновление кода
-Обновите файлы в папке
+## Install
 
-Нажмите "Обновить" в chrome://extensions/
+The extension is not in the Chrome Web Store — load it unpacked.
 
-Изменения применятся сразу
+1. **Download the files.** Open [Releases](https://github.com/N0deZ3r0/Quick-Ping-Chrome-Extension/releases/latest),
+   download the archive and unpack it into any folder.
+2. **Open the extensions page.** Go to `chrome://extensions/` and turn on
+   **Developer mode** in the top-right corner.
+3. **Load it.** Click **Load unpacked** and select the folder you unpacked.
+4. **Pin it.** Click the pin icon 📌 next to Quick Ping so it stays in the toolbar.
 
-✅ Готово! Теперь есть иконка ⚡ в Chrome
+That is all — there is now a ⚡ icon in Chrome.
 
+### Chrome shows a warning
 
+That is expected for any unpacked extension. Click **Details** under the warning,
+then **Install anyway**. The extension works normally afterwards.
 
+### Files the extension needs
 
+```text
+manifest.json    required
+popup.html       required
+popup.css        required
+popup.js         required
+icons/           icon folder
+```
 
-Quick Ping ⚡
-Молниеносная проверка пинга сайтов прямо в Chrome
+## Updating your own build
 
-🎯 Что это?
-Простое расширение для быстрой проверки скорости отклика любого сайта. Введите адрес → получите пинг в миллисекундах.
+1. Replace the files in the folder.
+2. Press **Reload** on the extension's card in `chrome://extensions/`.
+3. The change takes effect immediately.
 
-✨ Особенности
-✅ Быстро — результат за 2-3 секунды
+## Permissions
 
-✅ Просто — минимум кнопок, максимум пользы
+| Permission | Why it is needed |
+|---|---|
+| `activeTab` | Read the address of the tab you are on, so it can be pinged |
+| `storage` | Keep the history of your checks locally |
 
-✅ Наглядно — цветовая индикация качества пинга
+Nothing is sent anywhere. The history lives in your browser and never leaves it.
 
-✅ Умно — показывает ERROR для недоступных сайтов
+## Contributing
 
-✅ Практично — сохраняет историю проверок
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Found a security problem? Please
+[report it privately](https://github.com/N0deZ3r0/Quick-Ping-Chrome-Extension/security/advisories/new)
+rather than in a public issue.
 
-🚀 Установка за 1 минуту
-Способ 1: Из исходного кода
-Скачайте архив с файлами
+## License
 
-Откройте chrome://extensions/
-
-Включите "Режим разработчика" (правый верхний угол)
-
-Нажмите "Загрузить распакованное расширение"
-
-Выберите папку с файлами
+[MIT](LICENSE) — free to use, including commercially.
